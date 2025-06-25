@@ -2,6 +2,8 @@ import re
 import subprocess
 from typing import List, Optional, Dict
 
+from termcolor.termcolor import colored
+
 
 def _get_user_lang() -> str:
     """Get user language from system (placeholder)"""
@@ -68,6 +70,35 @@ def detect_pager() -> Optional[str]:
                 return None
 
 
+STYLES = {
+    'unstyled': lambda text: colored(f'unstyled: {text}', color='magenta'),
+    'debug': lambda text: colored(f'-- {text}', color='cyan'),
+
+    'alternatives-original': lambda text: colored(text, attrs=['underline']),
+}
+# TODO: transfer from AWK to style dict
+#     Option["sgr-translation"] = Option["sgr-translation-phonetics"] = "bold"
+#     Option["sgr-prompt-message-original"] = "underline"
+#     Option["sgr-languages-sl"] = "underline"
+#     Option["sgr-languages-tl"] = "bold"
+#     Option["sgr-original-dictionary-detailed-explanation"] = "bold"
+#     Option["sgr-original-dictionary-detailed-synonyms-item"] = "bold"
+#     Option["sgr-original-dictionary-synonyms-synonyms-item"] = "bold"
+#     Option["sgr-original-dictionary-examples-original"][1] = "bold"
+#     Option["sgr-original-dictionary-examples-original"][2] = "underline"
+#     Option["sgr-original-dictionary-see-also-phrases-item"] = "bold"
+#     Option["sgr-dictionary-word"] = "bold"
+#     Option["sgr-alternatives-original"] = "underline"
+#     Option["sgr-alternatives-translations-item"] = "bold"
+#     Option["fmt-welcome-message"] = Name
+#     Option["sgr-welcome-message"] = "bold"
+#     Option["fmt-welcome-submessage"] = "(:q to quit)"
+#     Option["fmt-prompt"] = "%s> "
+#     Option["sgr-prompt"] = "bold"
+
+
 def prettify(style: str, text: str) -> str:
     """Apply styling to text"""
-    return text  # Placeholder - would apply ANSI colors/formatting
+    if style not in STYLES:
+        return STYLES['unstyled'](text)
+    return STYLES[style](text)

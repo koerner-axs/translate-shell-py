@@ -1,7 +1,7 @@
 import argparse
 import json
 import urllib.parse
-from typing import override
+from typing import override, List
 
 from src.langdata import get_code, get_endonym
 from src.misc import prettify
@@ -165,24 +165,6 @@ class GoogleTranslationEngine(TranslationEngine):
 
     def __init__(self, options: argparse.Namespace):
         super().__init__(options)
-        self.http_port = 80
-        self.http_path_prefix = ""
-        self.tk_cache = {}
-        #self.options = {
-        #    "no-autocorrect": False,
-        #    "dump": False,
-        #    "verbose": 0,
-        #    "show-original": True,
-        #    "show-original-phonetics": True,
-        #    "show-translation": True,
-        #    "show-translation-phonetics": True,
-        #    "show-prompt-message": True,
-        #    "show-languages": True,
-        #    "show-original-dictionary": True,
-        #    "show-dictionary": True,
-        #    "show-alternatives": True,
-        #    "fmt-languages": "[ %s -> %t ]"
-        #}
 
     @override
     def initialize(self):
@@ -304,11 +286,22 @@ class GoogleTranslationEngine(TranslationEngine):
 
         # Show language direction
         if self.options.show_languages:
+            self._if_debug(result_parts, 'display source language -> target language')
             result_parts.append(f'[ {get_endonym(code_source_lang)} -> {get_endonym(code_target_lang)} ]')
 
-        # Show dictionary
-        # TODO: a lot of stuff missing (CLAUDE!11!)
-        #       see GoogleTranslate.awk::335ff
+        # TODO: Show original dictionary
+        self._if_debug(result_parts, 'display original dictionary entries')
+
+        # TODO: Show dictionary
+        self._if_debug(result_parts, 'display dictionary entries')
+
+        # TODO: Show alternatives
+        result_parts.append('')
+        self._if_debug(result_parts, 'display alternative translations')
+        for original, translations in response.alternatives.items():
+            result_parts.append(prettify('alternatives-original', original))
+            # TODO: missing RTL support, or am I? I feel like the translation should be adjusted to the host lang or src
+            result_parts.append(prettify('alternatives-translations-item', self.indent(1, ', '.join(translations))))
 
         # TODO: implement these features or remove
         #if to_speech and return_playlist is not None:
@@ -340,27 +333,15 @@ class GoogleTranslationEngine(TranslationEngine):
 
         return result
 
+    def _if_debug(self, result_parts: List[str], text: str):
+        if self.options.debug:
+            result_parts.append(prettify("debug", text))
+
+    def indent(self, tabs: int, text: str):
+        tab_width = self.options.indent or 4
+        return ' ' * (tabs * tab_width) + text
 
 
-
-
-
-
-
-
-
-    def _get_language(self, code: str) -> str:
-        """Get language name from code"""
-        # This would normally map codes to language names
-        return code
-
-    def _get_endonym(self, code: str) -> str:
-        """Get display name for language"""
-        return self._get_language(code)
-
-    def _get_name(self, code: str) -> str:
-        """Get name for language"""
-        return self._get_language(code)
 
     def _show_definitions_of(self, hl: str, word: str) -> str:
         """Get 'Definitions of' text in host language"""

@@ -83,7 +83,6 @@ class TranslationEngine(metaclass=abc.ABCMeta):
         self.http_service = None
         self.http_host = ""
         self.http_port = 80
-        self.http_path_prefix = ""
         self.http_proxy_spec = {}
         self.http_auth_user = ""
         self.http_auth_pass = ""
@@ -91,30 +90,6 @@ class TranslationEngine(metaclass=abc.ABCMeta):
         self.cookie = ""
         self.pager = ""
         self.dump_content_lengths = {}
-
-    def init_http_service(self) -> None:
-        """Initialize HTTP service connection"""
-        inet = 'inet'
-        if self.options.ip_version:
-            inet = f'inet{self.options['ip-version']}'
-
-        if self.options.proxy:
-            proxy_match = re.match(
-                r'^(http://)??(([^:]+):([^@]+)@)?([^/]*):([^/:]*)$',
-                self.options['proxy']
-            )
-            if proxy_match:
-                self.http_auth_user = proxy_match.group(3) or ""
-                self.http_auth_pass = proxy_match.group(4) or ""
-                if self.http_auth_user and self.http_auth_pass:
-                    credentials = f'{unquote(self.http_auth_user)}:{self.http_auth_pass}'
-                    self.http_auth_credentials = base64.b64encode(
-                        credentials.encode()).decode()
-                self.http_service = f'/{inet}/tcp/0/{proxy_match.group(5)}/{proxy_match.group(6)}'
-                self.http_path_prefix = f'http://{self.http_host}'
-        else:
-            self.http_service = f'/{inet}/tcp/0/{self.http_host}/{self.http_port}'
-            self.http_path_prefix = ""
 
     def http_get(self, url: str) -> str:
         """Send an HTTP GET request and get response from online translator"""
@@ -179,81 +154,6 @@ class TranslationEngine(metaclass=abc.ABCMeta):
         except requests.exceptions.RequestException as e:
             _warning(f'[WARNING] Request error: {e}')
             return ""
-
-    def http_get_old(self, url: str) -> str:
-        """Send an HTTP GET request and get response from online translator"""
-        headers = {
-            'Host': self.http_host,
-            'Connection': 'close'
-        }
-
-        if self.options.user_agent:
-            headers['User-Agent'] = self.options.user_agent
-        if self.cookie:
-            headers['Cookie'] = self.cookie
-        if self.http_auth_user and self.http_auth_pass:
-            headers['Proxy-Authorization'] = f'Basic {self.http_auth_credentials}'
-
-        # Create HTTP request
-        header_str = f'GET {url} HTTP/1.1\r\n'
-        for key, value in headers.items():
-            header_str += f'{key}: {value}\r\n'
-        header_str += '\r\n'
-
-        content = ""
-        status = ""
-        location = ""
-
-        try:
-            # This is a simplified version - in practice you'd need proper socket handling
-            # or use requests library for HTTP communication
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect((self.http_host, self.http_port))
-            sock.send(header_str.encode())
-
-            response = b""
-            while True:
-                data = sock.recv(4096)
-                if not data:
-                    break
-                response += data
-
-            sock.close()
-
-            # Parse response
-            response_str = response.decode('utf-8', errors='ignore')
-            header_end = response_str.find('\r\n\r\n')
-            if header_end != -1:
-                header_part = response_str[:header_end]
-                content = response_str[header_end + 4:]
-
-                # Extract status and location from headers
-                status_match = re.search(r'HTTP[^ ]* ([^ ]*)', header_part)
-                if status_match:
-                    status = status_match.group(1)
-
-                location_match = re.search(r'Location: (.*)', header_part)
-                if location_match:
-                    location = location_match.group(1).strip()
-
-        except Exception as e:
-            _warning(f'[WARNING] Connection error: {e}')
-            return ""
-
-        # Handle redirects and errors
-        if status in ['301', '302'] and location:
-            # Handle redirect - would need to implement curl equivalent
-            pass
-        elif status == '429':
-            _error(
-                f'[ERROR] {self.options.engine.title()} did not return results because rate limiting is in effect')
-            return ""
-        elif status and int(status) >= 400:
-            _error(
-                f'[ERROR] {self.options.engine.title()} returned an error response. HTTP status code: {status}')
-            return ""
-
-        return content or ""
 
     def post_response(self, text: str, sl: str, tl: str, hl: str, req_type: str = "") -> str:
         """Send an HTTP POST request and return response from online translator"""

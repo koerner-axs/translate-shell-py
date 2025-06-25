@@ -5,12 +5,13 @@ import os
 import sys
 from typing import List, Optional, Dict
 
-from src.config import load_init_script
-from src.engines.google_translate import GoogleTranslationEngine
-from src.interactive import run_interactive, run_emacs_mode
-from src.misc import _yn_to_bool, _get_user_lang, _parse_language_codes, _parse_shortcut_format
-from src.translate import TranslationEngine
-from src.unimpl import _get_version
+from config import load_init_script
+from engines.google_translate import GoogleTranslationEngine
+from interactive import run_interactive, run_emacs_mode
+from misc import _yn_to_bool, _get_user_lang, _parse_language_codes, _parse_shortcut_format
+from src.misc import prettify
+from translate import TranslationEngine
+from unimpl import _get_version
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -458,4 +459,6 @@ def main():
 
 
 if __name__ == '__main__':
+    if os.name == 'nt':
+        os.system('color')
     sys.exit(main())
