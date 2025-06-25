@@ -3,7 +3,7 @@ import json
 import urllib.parse
 from typing import override
 
-from src.langdata import get_code
+from src.langdata import get_code, get_endonym
 from src.misc import prettify
 from src.translate import TranslationEngine
 
@@ -15,11 +15,8 @@ class GoogleTranslateResponse:
         self.phonetics = [x[2] for x in content[0] if x and x[2]] if content[0] else []
         self.orig_phonetics = [x[3] for x in content[0] if x and x[3]] if content[0] else []
 
-        # 1 - word classes and explanations
-        self.words = self._parse_words(content[1]) if content[1] else {}
-
-        # 5 - alternative translations
-        self.alternatives = self._parse_alternatives(content[5]) if content[5] else {}
+        self.words = self._parse_words(content)
+        self.alternatives = self._parse_alternatives(content)
 
         # 7 - autocorrection
         if content[7] is not None and len(content[7]) >= 5:
@@ -29,30 +26,19 @@ class GoogleTranslateResponse:
             self.autocorrected_input = False
             self.correction_hint = None
 
-        # 2 & 8 - identified source languages
-        self.identified_langs = []
-        if content[2]:
-            self.identified_langs.append(content[2])
-        if content[8] and len(content[8]) >= 1 and content[0]:
-            self.identified_langs.extend([x for x in content[8][0] if x])
-
-        # 11 - (original) word classes and synonyms
-        self.orig_synonyms = self._parse_orig_synonyms(content[11]) if content[11] else {}
-
-        # 12 - (original) word classes and explanations
-        self.orig_words = self._parse_orig_words(content[12]) if content[12] else {}
-
-        # 13 - (original) examples
-        self.orig_examples = self._parse_orig_examples(content[13]) if content[13] else []
-
-        # 14 - (original) see also
-        self.orig_see_also = content[14][0] if content[14] and len(content[14]) and content[14][0] else []
-
-        # 18 - gender-specific translations
-        self.gendered = self._parse_gendered(content[18]) if content[18] else []
+        self.identified_langs = self._parse_identified_langs(content)
+        self.orig_synonyms = self._parse_orig_synonyms(content)
+        self.orig_words = self._parse_orig_words(content)
+        self.orig_examples = self._parse_orig_examples(content)
+        self.orig_see_also = self._parse_orig_see_also(content)
+        self.gendered = self._parse_gendered(content)
 
     @staticmethod
     def _parse_words(content):
+        if len(content) < 2 or not content[1]:
+            return {}
+        content = content[1]
+
         words = {}
         for x in content:
             if x and len(x) >= 3 and x[0] and x[2]:
@@ -65,6 +51,10 @@ class GoogleTranslateResponse:
 
     @staticmethod
     def _parse_alternatives(content):
+        if len(content) < 6 or not content[5]:
+            return {}
+        content = content[5]
+
         alternatives = {}
         for x in content:
             if x and len(x) >= 3 and x[0] and x[2]:
@@ -72,9 +62,22 @@ class GoogleTranslateResponse:
         return alternatives
 
     @staticmethod
+    def _parse_identified_langs(content):
+        identified_langs = []
+        if len(content) >= 3 and content[2]:
+            identified_langs.append(content[2])
+        if len(content) >= 9 and content[8] and len(content[8]) >= 1 and content[8][0]:
+            identified_langs.extend([x for x in content[8][0] if x])
+        return identified_langs
+
+    @staticmethod
     def _parse_orig_synonyms(content):
+        if len(content) < 12 or not content[11]:
+            return {}
+        content = content[11]
+
         # TODO: check if this is to the API spec, I can't reproduce a case where this field is set
-        orig_synonyms = {x[0]: 'whatever' for x in content[11]} if content[11] else None
+        orig_synonyms = {x[0]: 'whatever' for x in content} if content else None
         # TODO: here I stopped, didn't know how to make sense of this monstrosity
         #       The two refs are somehow used to 2D index into oSynonyms, but no clue what they represent
 
@@ -91,6 +94,10 @@ class GoogleTranslateResponse:
 
     @staticmethod
     def _parse_orig_words(content):
+        if len(content) < 13 or not content[12]:
+            return {}
+        content = content[12]
+
         orig_words = {}
         for x in content:
             if x and len(x) >= 2 and x[0] and x[1]:
@@ -109,6 +116,10 @@ class GoogleTranslateResponse:
 
     @staticmethod
     def _parse_orig_examples(content):
+        if len(content) < 14 or not content[13]:
+            return []
+        content = content[13]
+
         orig_examples = []
         if len(content) >= 1 and content[0]:
             for x in content[0]:
@@ -117,7 +128,19 @@ class GoogleTranslateResponse:
         return orig_examples
 
     @staticmethod
+    def _parse_orig_see_also(content):
+        if len(content) < 15 or not content[14]:
+            return []
+        content = content[14]
+
+        return content[0] if len(content) > 0 and content[0] else []
+
+    @staticmethod
     def _parse_gendered(content):
+        if len(content) < 19 or not content[18]:
+            return []
+        content = content[18]
+
         gendered = {}
         if len(content) >= 1 and content[0]:
             _keys = ['male', 'female']
@@ -237,31 +260,23 @@ class GoogleTranslationEngine(TranslationEngine):
 
         content = json.loads(content)
         if not content:
-            return "[ERROR] Could not parse translation response"
+            return "[ERROR] Could not parse json response"
 
         response = GoogleTranslateResponse(content)
 
-
-
-
-        #translation = " ".join(translations) if translations else ""
-
-
         # Set identified language
-        #if return_il is not None:
-        #    il = source_lang if not ils or source_lang in ils else ils[0]
-        #    return_il.append(il)
-        #    if self.options.verbose < -1:
-        #        return il
-        #    elif self.options.verbose < 0:
-        #        return self._get_language(il)
+        # TODO: check this holds, maybe refactor to reduce implicit knowledge, referring to identified_langs
+        if not code_source_lang and len(response.identified_langs) >= 1:
+            code_source_lang = response.identified_langs[0]
+        if not code_target_lang and len(response.identified_langs) >= 2:
+            code_target_lang = response.identified_langs[1]
 
         if is_verbose:
-            return self.format_verbose(response)
+            return self.format_verbose(response, code_source_lang, code_target_lang)
         else:
-            return self.format_brief(response, is_phonetic)
+            return self.format_brief(response, is_phonetic, code_target_lang)
 
-    def format_verbose(self, response) -> str:
+    def format_verbose(self, response: GoogleTranslateResponse, code_source_lang, code_target_lang) -> str:
         """Format engine response verbosely"""
         result_parts = []
 
@@ -270,9 +285,7 @@ class GoogleTranslationEngine(TranslationEngine):
             result_parts.append("Original:")
             result_parts.append(prettify("original", " ".join(response.original)))
             if self.options.show_original_phonetics and len(response.orig_phonetics) > 0:
-                # TODO: check this holds, maybe refactor to reduce implicit knowledge
-                identified_source_lang = response.identified_langs[0]
-                result_parts.append(_format_phonetics(" ".join(response.orig_phonetics), identified_source_lang))
+                result_parts.append(_format_phonetics(" ".join(response.orig_phonetics), code_source_lang))
 
         # Show translation
         if self.options.show_translation:
@@ -282,34 +295,39 @@ class GoogleTranslationEngine(TranslationEngine):
                 result_parts.append(f"(♂) {response.gendered.get('male', '')}")
                 result_parts.append(f"(♀) {response.gendered.get('female', '')}")
             else:
-                result_parts.append(prettify("translation", translation))
+                result_parts.append(prettify("translation", " ".join(response.translations)))
 
-            if self.options.show_translation_phonetics and phonetics:
-                result_parts.append(_format_phonetics(" ".join(phonetics), target_lang))
+            if self.options.show_translation_phonetics and response.phonetics:
+                result_parts.append(_format_phonetics(" ".join(response.phonetics), code_target_lang))
+
+        # TODO: prompt messages missing
 
         # Show language direction
         if self.options.show_languages:
-            lang_format = self.options.fmt_languages
-            lang_display = lang_format.replace("%s", self._get_display(source_lang))
-            lang_display = lang_display.replace("%t", self._get_display(target_lang))
-            result_parts.append(lang_display)
+            result_parts.append(f'[ {get_endonym(code_source_lang)} -> {get_endonym(code_target_lang)} ]')
 
-        if to_speech and return_playlist is not None:
-            return_playlist.extend([
-                {"text": " ".join(original), "tl": source_lang},
-                {"text": self._show_translations_of(host_lang, ""), "tl": code_host_lang},
-                {"text": translation, "tl": code_target_lang}
-            ])
+        # Show dictionary
+        # TODO: a lot of stuff missing (CLAUDE!11!)
+        #       see GoogleTranslate.awk::335ff
 
-        return "\n".join(result_parts)
+        # TODO: implement these features or remove
+        #if to_speech and return_playlist is not None:
+        #    return_playlist.extend([
+        #        {"text": " ".join(original), "tl": source_lang},
+        #        {"text": self._show_translations_of(host_lang, ""), "tl": code_host_lang},
+        #        {"text": translation, "tl": code_target_lang}
+        #    ])
 
-    def format_brief(self, response, is_phonetic: bool) -> str:
+        return '\n'.join(result_parts)
+
+    @staticmethod
+    def format_brief(response: GoogleTranslateResponse, is_phonetic: bool, code_target_lang: str) -> str:
         """Format engine response briefly"""
 
         if is_phonetic and len(response.phonetics) > 0:
             result = prettify("brief-translation-phonetics", " ".join(response.phonetics))
         elif len(response.translations) > 0:
-            result = prettify("brief-translation", " ".join(response.translation))
+            result = prettify("brief-translation", " ".join(response.translations))
         else:
             result = prettify("error", "Brief formatting failed, engine response likely invalid - rare error")
 
@@ -336,7 +354,7 @@ class GoogleTranslationEngine(TranslationEngine):
         # This would normally map codes to language names
         return code
 
-    def _get_display(self, code: str) -> str:
+    def _get_endonym(self, code: str) -> str:
         """Get display name for language"""
         return self._get_language(code)
 
