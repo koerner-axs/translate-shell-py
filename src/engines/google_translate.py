@@ -281,16 +281,18 @@ class GoogleTranslationEngine(TranslationEngine):
 
         # Show translation
         if self.options.show_translation:
-            result_parts.append("Translation:")
+            result_parts.append('')
+            self._if_debug(result_parts, 'display major translation & phonetics')
             if len(response.gendered) > 0:
                 # TODO: check if the wrong way around
-                result_parts.append(f"(♂) {response.gendered.get('male', '')}")
-                result_parts.append(f"(♀) {response.gendered.get('female', '')}")
+                result_parts.append(prettify('prompt-message', '(♂) ') +
+                                    prettify('translation', response.gendered.get('male', '')))
+                result_parts.append(prettify('prompt-message', '(♀) ') +
+                                    prettify('translation', response.gendered.get('female', '')))
             else:
-                result_parts.append(prettify("translation", " ".join(response.translations)))
-
+                result_parts.append(prettify('translation', ' '.join(response.translations)))
             if self.options.show_translation_phonetics and response.phonetics:
-                result_parts.append(_format_phonetics(" ".join(response.phonetics), code_target_lang))
+                result_parts.append(_format_phonetics(' '.join(response.phonetics), code_target_lang))
 
         if self.options.show_prompt_message or self.options.show_languages:
             result_parts.append('')

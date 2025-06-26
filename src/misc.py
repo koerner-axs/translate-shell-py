@@ -75,6 +75,8 @@ STYLES = {
     'basic': lambda text: text,
     'debug': lambda text: colored(f'-- {text}', color='cyan'),
 
+    'translation': lambda text: colored(text, attrs=['bold']),
+    'translation-phonetics': lambda text: colored(text, attrs=['bold']),
     'prompt-message-original': lambda text: colored(text, attrs=['underline']),
     'languages-source': lambda text: colored(text, attrs=['underline']),
     'languages-target': lambda text: colored(text, attrs=['bold']),
@@ -83,9 +85,6 @@ STYLES = {
     'alternatives-translations-item': lambda text: colored(text, attrs=['bold']),
 }
 # TODO: transfer from AWK to style dict
-#     Option["sgr-translation"] = Option["sgr-translation-phonetics"] = "bold"
-#     Option["sgr-languages-sl"] = "underline"
-#     Option["sgr-languages-tl"] = "bold"
 #     Option["sgr-original-dictionary-detailed-explanation"] = "bold"
 #     Option["sgr-original-dictionary-detailed-synonyms-item"] = "bold"
 #     Option["sgr-original-dictionary-synonyms-synonyms-item"] = "bold"
