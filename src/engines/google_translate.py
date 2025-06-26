@@ -274,10 +274,10 @@ class GoogleTranslationEngine(TranslationEngine):
 
         # Show original text
         if self.options.show_original and len(response.original) > 0:
-            result_parts.append("Original:")
-            result_parts.append(prettify("original", " ".join(response.original)))
+            self._if_debug(result_parts, 'display original text & phonetics')
+            result_parts.append(prettify('original', " ".join(response.original)))
             if self.options.show_original_phonetics and len(response.orig_phonetics) > 0:
-                result_parts.append(_format_phonetics(" ".join(response.orig_phonetics), code_source_lang))
+                result_parts.append(_format_phonetics(' '.join(response.orig_phonetics), code_source_lang))
 
         # Show translation
         if self.options.show_translation:
