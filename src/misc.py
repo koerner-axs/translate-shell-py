@@ -75,6 +75,7 @@ STYLES = {
     'basic': lambda text: text,
     'debug': lambda text: colored(f'-- {text}', color='cyan'),
 
+    'prompt-message-original': lambda text: colored(text, attrs=['underline']),
     'languages-source': lambda text: colored(text, attrs=['underline']),
     'languages-target': lambda text: colored(text, attrs=['bold']),
     'dictionary-word': lambda text: colored(text, attrs=['bold']),
@@ -83,7 +84,6 @@ STYLES = {
 }
 # TODO: transfer from AWK to style dict
 #     Option["sgr-translation"] = Option["sgr-translation-phonetics"] = "bold"
-#     Option["sgr-prompt-message-original"] = "underline"
 #     Option["sgr-languages-sl"] = "underline"
 #     Option["sgr-languages-tl"] = "bold"
 #     Option["sgr-original-dictionary-detailed-explanation"] = "bold"
@@ -99,6 +99,7 @@ STYLES = {
 #     Option["sgr-prompt"] = "bold"
 
 # TODO: Replace when a theme system is implemented
+STYLES['prompt-message'] = STYLES['basic']
 STYLES['languages'] = STYLES['basic']
 STYLES['dictionary-word-class'] = STYLES['basic']
 STYLES['dictionary-explanations-item'] = STYLES['basic']

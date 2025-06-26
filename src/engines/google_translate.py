@@ -4,7 +4,7 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import override, List
 
-from src.langdata import get_code, get_endonym
+from src.langdata import get_code, get_endonym, show_definitions_of, show_translations_of
 from src.misc import prettify
 from src.translate import TranslationEngine
 
@@ -264,11 +264,11 @@ class GoogleTranslationEngine(TranslationEngine):
             code_target_lang = response.identified_langs[1]
 
         if is_verbose:
-            return self.format_verbose(response, code_source_lang, code_target_lang)
+            return self.format_verbose(response, code_host_lang, code_source_lang, code_target_lang)
         else:
             return self.format_brief(response, is_phonetic, code_target_lang)
 
-    def format_verbose(self, response: GoogleTranslateResponse, code_source_lang, code_target_lang) -> str:
+    def format_verbose(self, response: GoogleTranslateResponse, code_host_lang, code_source_lang, code_target_lang) -> str:
         """Format engine response verbosely"""
         result_parts = []
 
@@ -292,7 +292,21 @@ class GoogleTranslationEngine(TranslationEngine):
             if self.options.show_translation_phonetics and response.phonetics:
                 result_parts.append(_format_phonetics(" ".join(response.phonetics), code_target_lang))
 
-        # TODO: prompt messages missing
+        if self.options.show_prompt_message or self.options.show_languages:
+            result_parts.append('')
+
+        # Show prompt
+        if self.options.show_prompt_message:
+            self._if_debug(result_parts, 'display prompt message')
+            prompt_message = None
+            if len(response.dictionary) > 0:
+                prompt_message = show_definitions_of(code_host_lang)
+            elif len(response.alternatives) > 0:
+                prompt_message = show_translations_of(code_host_lang)
+            if prompt_message:
+                # TODO: missing RTL support
+                result_parts.append(prettify('prompt-message', prompt_message + ' ') +
+                                    prettify('prompt-message-original', ' '.join(response.original)))
 
         # Show language direction
         if self.options.show_languages:
@@ -312,6 +326,7 @@ class GoogleTranslationEngine(TranslationEngine):
         for word_class, dictionary in response.dictionary.items():
             result_parts.append(prettify('dictionary-word-class', word_class))
             for entry in dictionary:
+                # TODO: missing RTL support
                 word = f'({entry.article}) {entry.word}' if entry.article else entry.word
                 result_parts.append(self.indent(1, prettify('dictionary-word', word)))
                 pretty_back_translations = [prettify('dictionary-explanations-item', x) for x in entry.back_translations]

@@ -9,7 +9,6 @@ from config import load_init_script
 from engines.google_translate import GoogleTranslationEngine
 from interactive import run_interactive, run_emacs_mode
 from misc import _yn_to_bool, _get_user_lang, _parse_language_codes, _parse_shortcut_format
-from src.misc import prettify
 from translate import TranslationEngine
 from unimpl import _get_version
 
