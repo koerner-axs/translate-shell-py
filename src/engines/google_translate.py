@@ -301,7 +301,8 @@ class GoogleTranslationEngine(TranslationEngine):
         for original, translations in response.alternatives.items():
             result_parts.append(prettify('alternatives-original', original))
             # TODO: missing RTL support, or am I? I feel like the translation should be adjusted to the host lang or src
-            result_parts.append(prettify('alternatives-translations-item', self.indent(1, ', '.join(translations))))
+            pretty_translations = [prettify('alternatives-translations-item', x) for x in translations]
+            result_parts.append(self.indent(1, prettify('basic', ', ').join(pretty_translations)))
 
         # TODO: implement these features or remove
         #if to_speech and return_playlist is not None:

@@ -71,10 +71,12 @@ def detect_pager() -> Optional[str]:
 
 
 STYLES = {
-    'unstyled': lambda text: colored(f'unstyled: {text}', color='magenta'),
+    'unstyled': lambda text: colored(f'unstyled: {text}', color='magenta', attrs=['strike']),
+    'basic': lambda text: text,
     'debug': lambda text: colored(f'-- {text}', color='cyan'),
 
     'alternatives-original': lambda text: colored(text, attrs=['underline']),
+    'alternatives-translations-item': lambda text: colored(text, attrs=['bold']),
 }
 # TODO: transfer from AWK to style dict
 #     Option["sgr-translation"] = Option["sgr-translation-phonetics"] = "bold"
@@ -88,8 +90,6 @@ STYLES = {
 #     Option["sgr-original-dictionary-examples-original"][2] = "underline"
 #     Option["sgr-original-dictionary-see-also-phrases-item"] = "bold"
 #     Option["sgr-dictionary-word"] = "bold"
-#     Option["sgr-alternatives-original"] = "underline"
-#     Option["sgr-alternatives-translations-item"] = "bold"
 #     Option["fmt-welcome-message"] = Name
 #     Option["sgr-welcome-message"] = "bold"
 #     Option["fmt-welcome-submessage"] = "(:q to quit)"
