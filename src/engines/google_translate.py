@@ -1,11 +1,19 @@
 import argparse
 import json
 import urllib.parse
+from dataclasses import dataclass
 from typing import override, List
 
 from src.langdata import get_code, get_endonym
 from src.misc import prettify
 from src.translate import TranslationEngine
+
+
+@dataclass
+class DictionaryEntry:
+    word: str
+    article: str
+    back_translations: List[str]
 
 
 class GoogleTranslateResponse:
@@ -15,7 +23,7 @@ class GoogleTranslateResponse:
         self.phonetics = [x[2] for x in content[0] if x and x[2]] if content[0] else []
         self.orig_phonetics = [x[3] for x in content[0] if x and x[3]] if content[0] else []
 
-        self.words = self._parse_words(content)
+        self.dictionary = self._parse_dictionary(content)
         self.alternatives = self._parse_alternatives(content)
 
         # 7 - autocorrection
@@ -34,20 +42,22 @@ class GoogleTranslateResponse:
         self.gendered = self._parse_gendered(content)
 
     @staticmethod
-    def _parse_words(content):
+    def _parse_dictionary(content):
         if len(content) < 2 or not content[1]:
             return {}
         content = content[1]
 
-        words = {}
+        dictionary = {}
         for x in content:
             if x and len(x) >= 3 and x[0] and x[2]:
-                inner_words = {}
-                for y in x[2]:
+                word_class, entries = x[0], x[2]
+                entries_for_class = []
+                for y in entries:
+                    word, back_translations, article = y[0], y[1], y[4]
                     if y and len(y) >= 2 and y[0] and y[1]:
-                        inner_words[y[0]] = y[1]
-                words[x[0]] = inner_words
-        return words
+                        entries_for_class.append(DictionaryEntry(word, article, back_translations))
+                dictionary[word_class] = entries_for_class
+        return dictionary
 
     @staticmethod
     def _parse_alternatives(content):
@@ -292,10 +302,18 @@ class GoogleTranslationEngine(TranslationEngine):
         # TODO: Show original dictionary
         self._if_debug(result_parts, 'display original dictionary entries')
 
-        # TODO: Show dictionary
+        # Show dictionary
+        result_parts.append('')
         self._if_debug(result_parts, 'display dictionary entries')
+        for word_class, dictionary in response.dictionary.items():
+            result_parts.append(prettify('dictionary-word-class', word_class))
+            for entry in dictionary:
+                word = f'({entry.article}) {entry.word}' if entry.article else entry.word
+                result_parts.append(self.indent(1, prettify('dictionary-word', word)))
+                pretty_back_translations = [prettify('dictionary-explanations-item', x) for x in entry.back_translations]
+                result_parts.append(self.indent(2, prettify('basic', ', ').join(pretty_back_translations)))
 
-        # TODO: Show alternatives
+        # Show alternative translations
         result_parts.append('')
         self._if_debug(result_parts, 'display alternative translations')
         for original, translations in response.alternatives.items():

@@ -75,6 +75,8 @@ STYLES = {
     'basic': lambda text: text,
     'debug': lambda text: colored(f'-- {text}', color='cyan'),
 
+    'dictionary-word': lambda text: colored(text, attrs=['bold']),
+
     'alternatives-original': lambda text: colored(text, attrs=['underline']),
     'alternatives-translations-item': lambda text: colored(text, attrs=['bold']),
 }
@@ -89,12 +91,15 @@ STYLES = {
 #     Option["sgr-original-dictionary-examples-original"][1] = "bold"
 #     Option["sgr-original-dictionary-examples-original"][2] = "underline"
 #     Option["sgr-original-dictionary-see-also-phrases-item"] = "bold"
-#     Option["sgr-dictionary-word"] = "bold"
 #     Option["fmt-welcome-message"] = Name
 #     Option["sgr-welcome-message"] = "bold"
 #     Option["fmt-welcome-submessage"] = "(:q to quit)"
 #     Option["fmt-prompt"] = "%s> "
 #     Option["sgr-prompt"] = "bold"
+
+# TODO: Replace when a theme system is implemented
+STYLES['dictionary-word-class'] = STYLES['basic']
+STYLES['dictionary-explanations-item'] = STYLES['basic']
 
 
 def prettify(style: str, text: str) -> str:
