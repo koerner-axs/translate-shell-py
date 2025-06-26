@@ -75,8 +75,9 @@ STYLES = {
     'basic': lambda text: text,
     'debug': lambda text: colored(f'-- {text}', color='cyan'),
 
+    'languages-source': lambda text: colored(text, attrs=['underline']),
+    'languages-target': lambda text: colored(text, attrs=['bold']),
     'dictionary-word': lambda text: colored(text, attrs=['bold']),
-
     'alternatives-original': lambda text: colored(text, attrs=['underline']),
     'alternatives-translations-item': lambda text: colored(text, attrs=['bold']),
 }
@@ -98,6 +99,7 @@ STYLES = {
 #     Option["sgr-prompt"] = "bold"
 
 # TODO: Replace when a theme system is implemented
+STYLES['languages'] = STYLES['basic']
 STYLES['dictionary-word-class'] = STYLES['basic']
 STYLES['dictionary-explanations-item'] = STYLES['basic']
 

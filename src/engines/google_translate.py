@@ -297,7 +297,11 @@ class GoogleTranslationEngine(TranslationEngine):
         # Show language direction
         if self.options.show_languages:
             self._if_debug(result_parts, 'display source language -> target language')
-            result_parts.append(f'[ {get_endonym(code_source_lang)} -> {get_endonym(code_target_lang)} ]')
+            result_parts.append(prettify('languages', '[ ') +
+                                prettify('languages-source', get_endonym(code_source_lang)) +
+                                prettify('languages', ' -> ') +
+                                prettify('languages-target', get_endonym(code_target_lang)) +
+                                prettify('languages', ' ]'))
 
         # TODO: Show original dictionary
         self._if_debug(result_parts, 'display original dictionary entries')
