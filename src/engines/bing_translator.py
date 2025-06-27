@@ -49,7 +49,8 @@ class BingAccessToken:
 
 
 class BingTranslatorResponse:
-    pass
+    def __init__(self, content: str):
+        print(content)
 
 
 # See BingTranslator.awk::225ff.
@@ -84,21 +85,26 @@ class BingTranslatorEngine(TranslationEngine):
         content = self.http_get(self.get_endpoint('gettoken'))
         self.access_token = BingAccessToken.from_token_request_response(content)
 
-    def get_endpoint(self, type: str) -> str:
+    def get_endpoint(self, name: str) -> str:
         """Generate request URL for Bing Translator"""
-        if type == 'gettoken':
+        if name == 'gettoken':
             return 'http://bing.com/translator'
-        elif type == 'lookup':
+        elif name == 'lookup':
             return 'http://bing.com/tlookupv3'
+        elif name == 'translate':
+            return f'http://www.bing.com/ttranslatev3?IG={self.access_token.ig}&IID={self.access_token.iid}'
         else:
-            return f'http://bing.com/ttranslatev3?IG={self.ig}&IID={self.iid}'
+            raise ValueError(f'Unknown endpoint: {name}')
 
-    def request_body(self, text: str, sl: str, tl: str, type: str) -> str:
+    def request_body(self, text: str, sl: str, tl: str, name: str) -> str:
         """Generate request body for Bing Translator"""
-        if type == 'lookup':
+        if name == 'lookup':
             return f'&text={_escape_text(text)}&from={sl}&to={tl}'
+        elif name == 'translate':
+            return (f'&text={_escape_text(text)}&fromLang={sl}&to={tl}'
+                    f'&token={_escape_text(self.access_token.token)}&key={self.access_token.session_start}')
         else:
-            return f'&text={_escape_text(text)}&fromLang={sl}&to={tl}{self.token_key}'
+            raise ValueError(f'Unknown request type: {name}')
 
     @override
     def tts_url(self, text: str, tl: str):
@@ -133,8 +139,11 @@ class BingTranslatorEngine(TranslationEngine):
         bing_code_target_lang = _map_to_bing_lang_code(code_target_lang)
 
         # Get response from Bing Translator
-        url = self.request_url(text, code_source_lang, code_target_lang, code_host_lang)
-        content = self.http_post(url)
+        url = self.get_endpoint('translate')
+        content = self.http_post(url, self.request_body(text, bing_code_source_lang, bing_code_target_lang, 'translate'),
+                                 content_type='application/x-www-form-urlencoded')
+
+        # TODO: Bing seems not to realize which target language is requested. Check params!!
 
         if self.options.dump:
             return content
@@ -168,6 +177,3 @@ class BingTranslatorEngine(TranslationEngine):
     def indent(self, tabs: int, text: str):
         tab_width = self.options.indent or 4
         return ' ' * (tabs * tab_width) + text
-
-    def request_url(self, text: str, code_source_lang: str, code_target_lang: str, code_host_lang: str) -> str:
-        return ''

@@ -150,13 +150,15 @@ class TranslationEngine(metaclass=abc.ABCMeta):
             _warning(f'[WARNING] Request error: {e}')
             return ""
 
-    def http_post(self, url: str) -> str:
+    def http_post(self, url: str, content: str, content_type: str = None) -> str:
         """Send an HTTP POST request and return response from online translator"""
 
         # Prepare headers
         headers = {
             'Connection': 'close'
         }
+        if content_type:
+            headers['Content-Type'] = content_type
         if self.options.user_agent:
             headers['User-Agent'] = self.options.user_agent
 
@@ -180,6 +182,7 @@ class TranslationEngine(metaclass=abc.ABCMeta):
         try:
             response = requests.post(
                 url,
+                content,
                 headers=headers,
                 cookies=cookies,
                 auth=auth,
