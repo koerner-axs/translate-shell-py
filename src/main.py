@@ -9,6 +9,7 @@ from config import load_init_script
 from engines.google_translate import GoogleTranslationEngine
 from interactive import run_interactive, run_emacs_mode
 from misc import _yn_to_bool, _get_user_lang, _parse_language_codes, _parse_shortcut_format
+from src.engines.bing_translator import BingTranslatorEngine
 from translate import TranslationEngine
 from unimpl import _get_version
 
@@ -344,7 +345,8 @@ class TranslationCLI:
         self.options = None
         self.engine: Optional[TranslationEngine] = None
         self.engines: Dict[str, type[TranslationEngine]] = {
-            'google': GoogleTranslationEngine
+            'google': GoogleTranslationEngine,
+            'bing': BingTranslatorEngine,
         }
 
     def _init_misc(self):
@@ -450,6 +452,7 @@ class TranslationCLI:
             raise ValueError(f'Unknown engine: {self.options.engine}')
         # Construct engine
         self.engine = self.engines[self.options.engine](self.options)
+        self.engine.initialize()
 
 
 def main():

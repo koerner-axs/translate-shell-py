@@ -6,7 +6,7 @@ from typing import override, List
 
 from src.langdata import get_code, get_endonym, show_definitions_of, show_translations_of
 from src.misc import prettify
-from src.translate import TranslationEngine
+from src.translate import TranslationEngine, _escape_text
 
 
 @dataclass
@@ -160,11 +160,6 @@ class GoogleTranslateResponse:
         return gendered
 
 
-def _escape_text(text: str) -> str:
-    """URL encode text for request"""
-    return urllib.parse.quote(text, safe='')
-
-
 def _format_phonetics(phonetics: str, lang: str) -> str:
     """Format phonetics display. Add /slashes/ for IPA phonemic notations and (parentheses) for others"""
     return f'/{phonetics}/' if lang == 'en' else f'({phonetics})'
@@ -190,27 +185,6 @@ class GoogleTranslationEngine(TranslationEngine):
                 f"&dt=bd&dt=ex&dt=ld&dt=md&dt=rw&dt=rm&dt=ss&dt=t&dt=at&dt=gt"
                 f"&dt={qc}&sl={sl}&tl={tl}&hl={hl}"
                 f"&q={_escape_text(text)}")
-
-    @override
-    def post_request_url(self, text: str, sl: str, tl: str, hl: str, req_type: str) -> str:
-        """Generate POST request URL"""
-        # Google Translate typically uses GET requests
-        return self.request_url(text, sl, tl, hl)
-
-    @override
-    def post_request_content_type(self, text: str, sl: str, tl: str, hl: str, req_type: str) -> str:
-        """Get POST request content type"""
-        return 'application/x-www-form-urlencoded'
-
-    @override
-    def post_request_user_agent(self, text: str, sl: str, tl: str, hl: str, req_type: str) -> str:
-        """Get POST request user agent"""
-        return 'Mozilla/5.0 (compatible; GoogleTranslate)'
-
-    @override
-    def post_request_body(self, text: str, sl: str, tl: str, hl: str, req_type: str) -> str:
-        """Generate POST request body"""
-        return '' # Google Translate uses GET requests typically
 
     @override
     def tts_url(self, text: str, tl: str) -> str:
@@ -375,30 +349,8 @@ class GoogleTranslationEngine(TranslationEngine):
 
     def _if_debug(self, result_parts: List[str], text: str):
         if self.options.debug:
-            result_parts.append(prettify("debug", text))
+            result_parts.append(prettify('debug', text))
 
     def indent(self, tabs: int, text: str):
         tab_width = self.options.indent or 4
         return ' ' * (tabs * tab_width) + text
-
-
-
-    def _show_definitions_of(self, hl: str, word: str) -> str:
-        """Get 'Definitions of' text in host language"""
-        return f"Definitions of {word}"
-
-    def _show_translations_of(self, hl: str, word: str) -> str:
-        """Get 'Translations of' text in host language"""
-        return f"Translations of {word}"
-
-    def _show_synonyms(self, hl: str) -> str:
-        """Get 'Synonyms' text in host language"""
-        return "Synonyms"
-
-    def _show_examples(self, hl: str) -> str:
-        """Get 'Examples' text in host language"""
-        return "Examples"
-
-    def _show_see_also(self, hl: str) -> str:
-        """Get 'See also' text in host language"""
-        return "See also"

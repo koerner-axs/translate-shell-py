@@ -1,18 +1,17 @@
 import abc
 import argparse
-import base64
 import os
 import re
-import socket
 import subprocess
 import sys
+import urllib
 from typing import List, Optional
-from urllib.parse import quote, unquote
+from urllib.parse import quote
 
 import requests
 from requests.auth import HTTPBasicAuth
 
-from src.langdata import get_code
+from src.langdata import get_code, is_rtl
 from src.misc import prettify
 
 
@@ -26,18 +25,17 @@ def _has_fribidi() -> bool:
         return False
 
 
-def is_rtl(lang: str) -> bool:
-    """Check if language is right-to-left"""
-    rtl_languages = ['ar', 'he', 'fa', 'ur', 'yi', 'iw']
-    return lang in rtl_languages
-
-
 def _starts_with_any(text: str, prefixes: List[str]) -> Optional[str]:
     """Check if text starts with any of the given prefixes"""
     for prefix in prefixes:
         if text.startswith(prefix):
             return prefix
     return None
+
+
+def _escape_text(text: str) -> str:
+    """URL encode text for request"""
+    return urllib.parse.quote(text, safe='')
 
 
 def _error(message: str) -> None:
@@ -98,7 +96,6 @@ class TranslationEngine(metaclass=abc.ABCMeta):
         headers = {
             'Connection': 'close'
         }
-
         if self.options.user_agent:
             headers['User-Agent'] = self.options.user_agent
 
@@ -120,17 +117,15 @@ class TranslationEngine(metaclass=abc.ABCMeta):
                 cookies = self.cookie
 
         try:
-            # Make the request with automatic redirect handling
             response = requests.get(
                 url,
                 headers=headers,
                 cookies=cookies,
                 auth=auth,
-                timeout=30,  # Add timeout for better error handling
+                timeout=30,
                 allow_redirects=True  # Handle redirects automatically
             )
 
-            # Handle different status codes
             if response.status_code == 429:
                 _error(
                     f'[ERROR] {self.options.engine.title()} did not return results because rate limiting is in effect')
@@ -147,7 +142,7 @@ class TranslationEngine(metaclass=abc.ABCMeta):
         except requests.exceptions.ConnectionError as e:
             _warning(f'[WARNING] Connection error: {e}')
             return ""
-        except requests.exceptions.HTTPError as e:
+        except requests.exceptions.HTTPError:
             _error(
                 f'[ERROR] {self.options.engine.title()} returned an error response. HTTP status code: {response.status_code}')
             return ""
@@ -155,40 +150,102 @@ class TranslationEngine(metaclass=abc.ABCMeta):
             _warning(f'[WARNING] Request error: {e}')
             return ""
 
-    def post_response(self, text: str, sl: str, tl: str, hl: str, req_type: str = "") -> str:
+    def http_post(self, url: str) -> str:
         """Send an HTTP POST request and return response from online translator"""
-        url = self._post_request_url(text, sl, tl, hl, req_type)
-        content_type = _post_request_content_type(text, sl, tl, hl, req_type)
-        user_agent = self._post_request_user_agent(text, sl, tl, hl, req_type)
-        req_body = self._post_request_body(text, sl, tl, hl, req_type)
 
-        content_length = len(req_body.encode('utf-8'))
-
+        # Prepare headers
         headers = {
-            'Host': self.http_host,
-            'Connection': 'close',
-            'Content-Length': str(content_length),
-            'Content-Type': content_type
+            'Connection': 'close'
         }
-
-        if self.options.user_agent and not user_agent:
+        if self.options.user_agent:
             headers['User-Agent'] = self.options.user_agent
-        if user_agent:
-            headers['User-Agent'] = user_agent
-        if self.cookie:
-            headers['Cookie'] = self.cookie
+
+        # Prepare authentication
+        auth = None
         if self.http_auth_user and self.http_auth_pass:
-            headers['Proxy-Authorization'] = f'Basic {self.http_auth_credentials}'
+            auth = HTTPBasicAuth(self.http_auth_user, self.http_auth_pass)
 
-        # Create HTTP request
-        header_str = f'POST {url} HTTP/1.1\r\n'
-        for key, value in headers.items():
-            header_str += f'{key}: {value}\r\n'
-        header_str += f'\r\n{req_body}'
+        # Prepare cookies
+        cookies = {}
+        if self.cookie:
+            # Parse cookie string into dict if needed
+            if isinstance(self.cookie, str):
+                for cookie_pair in self.cookie.split(';'):
+                    if '=' in cookie_pair:
+                        key, value = cookie_pair.strip().split('=', 1)
+                        cookies[key] = value
+            else:
+                cookies = self.cookie
 
-        # Similar socket handling as in get_response
-        # Implementation would be similar to get_response but with POST
-        return ""  # Placeholder
+        try:
+            response = requests.post(
+                url,
+                headers=headers,
+                cookies=cookies,
+                auth=auth,
+                timeout=30,
+                allow_redirects=True  # Handle redirects automatically
+            )
+
+            if response.status_code == 429:
+                _error(
+                    f'[ERROR] {self.options.engine.title()} did not return results because rate limiting is in effect')
+                return ""
+
+            # Raise an exception for HTTP error status codes (4xx, 5xx)
+            response.raise_for_status()
+
+            return response.text
+
+        except requests.exceptions.Timeout:
+            _warning('[WARNING] Request timed out')
+            return ""
+        except requests.exceptions.ConnectionError as e:
+            _warning(f'[WARNING] Connection error: {e}')
+            return ""
+        except requests.exceptions.HTTPError:
+            _error(
+                f'[ERROR] {self.options.engine.title()} returned an error response. HTTP status code: {response.status_code}')
+            return ""
+        except requests.exceptions.RequestException as e:
+            _warning(f'[WARNING] Request error: {e}')
+            return ""
+
+
+
+
+        #url = self._post_request_url(text, sl, tl, hl, req_type)
+        #content_type = _post_request_content_type(text, sl, tl, hl, req_type)
+        #user_agent = self._post_request_user_agent(text, sl, tl, hl, req_type)
+        #req_body = self._post_request_body(text, sl, tl, hl, req_type)
+#
+        #content_length = len(req_body.encode('utf-8'))
+#
+        #headers = {
+        #    'Host': self.http_host,
+        #    'Connection': 'close',
+        #    'Content-Length': str(content_length),
+        #    'Content-Type': content_type
+        #}
+#
+        #if self.options.user_agent and not user_agent:
+        #    headers['User-Agent'] = self.options.user_agent
+        #if user_agent:
+        #    headers['User-Agent'] = user_agent
+        #if self.cookie:
+        #    headers['Cookie'] = self.cookie
+        #if self.http_auth_user and self.http_auth_pass:
+        #    headers['Proxy-Authorization'] = f'Basic {self.http_auth_credentials}'
+#
+        ## Create HTTP request
+        #header_str = f'POST {url} HTTP/1.1\r\n'
+        #for key, value in headers.items():
+        #    header_str += f'{key}: {value}\r\n'
+        #header_str += f'\r\n{req_body}'
+#
+        ## Similar socket handling as in get_response
+        ## Implementation would be similar to get_response but with POST
+        #return ""  # Placeholder
 
     def print_output(self, string: str) -> None:
         """Print a string to output file or terminal pager"""
@@ -222,6 +279,7 @@ class TranslationEngine(metaclass=abc.ABCMeta):
 
     def file_translation(self, uri: str) -> None:
         """Translate a file"""
+        # TODO: Test
         file_match = re.match(r'^file://(.*)$', uri)
         if file_match:
             temp_input = self.options.input
@@ -237,6 +295,7 @@ class TranslationEngine(metaclass=abc.ABCMeta):
 
     def web_translation(self, uri: str, sl: str, tl: str, hl: str) -> None:
         """Start a browser session and translate a web page"""
+        # TODO: Test
         url = self._web_translate_url(uri, sl, tl, hl)
         if url:
             self.print_output(url)
@@ -348,27 +407,6 @@ class TranslationEngine(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def initialize(self):
-        pass
-
-    @abc.abstractmethod
-    def post_request_url(self, text: str, sl: str, tl: str, hl: str, req_type: str) -> str:
-        """Generate POST request URL - to be implemented by specific engines"""
-        pass
-
-    @abc.abstractmethod
-    def post_request_content_type(self, text: str, sl: str, tl: str, hl: str, req_type: str) -> str:
-        """Get POST request content type - to be implemented by specific engines"""
-        #return 'application/x-www-form-urlencoded'
-        pass
-
-    @abc.abstractmethod
-    def post_request_user_agent(self, text: str, sl: str, tl: str, hl: str, req_type: str) -> str:
-        """Get POST request user agent - to be implemented by specific engines"""
-        pass
-
-    @abc.abstractmethod
-    def post_request_body(self, text: str, sl: str, tl: str, hl: str, req_type: str) -> str:
-        """Generate POST request body - to be implemented by specific engines"""
         pass
 
     @abc.abstractmethod
