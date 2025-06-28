@@ -101,6 +101,7 @@ STYLES = {
 STYLES['brief-translation'] = STYLES['basic']
 STYLES['brief-translation-phonetics'] = STYLES['basic']
 STYLES['original'] = STYLES['basic']
+STYLES['original-phonetics'] = STYLES['basic']
 STYLES['prompt-message'] = STYLES['basic']
 STYLES['languages'] = STYLES['basic']
 STYLES['dictionary-word-class'] = STYLES['basic']

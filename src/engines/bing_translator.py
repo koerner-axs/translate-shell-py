@@ -4,9 +4,9 @@ import re
 from dataclasses import dataclass
 from typing import override, List, Optional
 
-from src.langdata import get_code
+from src.langdata import get_code, get_endonym
 from src.misc import prettify
-from src.translate import TranslationEngine, _escape_text
+from src.translate import TranslationEngine, _escape_text, format_phonetics
 
 
 def first_match(pattern: str, data: str) -> re.Match | None:
@@ -51,24 +51,29 @@ class BingAccessToken:
 class BingTranslatorResponse:
     def __init__(self, content):
         self.identified_lang = content[0]['detectedLanguage']['language']
-        # TODO: do not print phonetics if equal to translation (redundant)
-        self.translations = self._parse_translations(content)
+        self.translation = self._parse_translation(content)
+        self.orig_phonetics = None
+
+    def ingest_original_phonetics_response(self, content):
+        # If the display of original phonetics is requested, additional data is queried and ingested here
+        translation = self._parse_translation(content)
+        if translation:
+            self.orig_phonetics = translation.get('transliteration')
 
     @staticmethod
-    def _parse_translations(content):
+    def _parse_translation(content):
         if len(content) < 1 or not content[0] or 'translations' not in content[0]:
             return []
         content = content[0]['translations']
 
-        translations = []
-        for x in content:
-            if 'text' in x:
-                translation = {'text': x['text']}
-                if ('transliteration' in x and (transl_dict := x['transliteration']) and 'text' in transl_dict
-                    and (transliteration := transl_dict['text'])) and transliteration:
+        if len(content) >= 1:
+            if 'text' in content[0]:
+                translation = {'text': content[0]['text']}
+                if ('transliteration' in content[0] and (transl_dict := content[0]['transliteration'])
+                    and 'text' in transl_dict and (transliteration := transl_dict['text']) and transliteration):
                     translation['transliteration'] = transliteration
-                translations.append(translation)
-        return translations
+                return translation
+        return None
 
 
 # See BingTranslator.awk::225ff.
@@ -90,6 +95,13 @@ def _map_to_bing_lang_code(code: str) -> str:
     return MAP[code] if code in MAP else code
 
 
+def _map_from_bing_lang_code(bing_code: str) -> str:
+    for ours, theirs in MAP.items():
+        if bing_code == theirs:
+            return ours
+    return bing_code
+
+
 class BingTranslatorEngine(TranslationEngine):
     """Google Translate API implementation"""
 
@@ -106,23 +118,16 @@ class BingTranslatorEngine(TranslationEngine):
     def get_endpoint(self, name: str) -> str:
         """Generate request URL for Bing Translator"""
         if name == 'gettoken':
-            return 'http://bing.com/translator'
-        elif name == 'lookup':
-            return 'http://bing.com/tlookupv3'
+            return 'http://www.bing.com/translator'
         elif name == 'translate':
             return f'http://www.bing.com/ttranslatev3?IG={self.access_token.ig}&IID={self.access_token.iid}'
         else:
             raise ValueError(f'Unknown endpoint: {name}')
 
-    def request_body(self, text: str, sl: str, tl: str, name: str) -> str:
+    def request_params(self, text: str, sl: str, tl: str) -> str:
         """Generate request body for Bing Translator"""
-        if name == 'lookup':
-            return f'&text={_escape_text(text)}&from={sl}&to={tl}'
-        elif name == 'translate':
-            return (f'&text={_escape_text(text)}&fromLang={sl}&to={tl}'
-                    f'&token={_escape_text(self.access_token.token)}&key={self.access_token.session_start}')
-        else:
-            raise ValueError(f'Unknown request type: {name}')
+        return (f'&text={_escape_text(text)}&fromLang={sl}&to={tl}'
+                f'&token={_escape_text(self.access_token.token)}&key={self.access_token.session_start}')
 
     @override
     def tts_url(self, text: str, tl: str):
@@ -157,40 +162,78 @@ class BingTranslatorEngine(TranslationEngine):
         bing_code_target_lang = _map_to_bing_lang_code(code_target_lang)
 
         # Get response from Bing Translator
-        url = self.get_endpoint('translate')
-        content = self.http_post(url, self.request_body(text, bing_code_source_lang, bing_code_target_lang, 'translate'),
+        content = self.http_post(self.get_endpoint('translate'),
+                                 self.request_params(text, bing_code_source_lang, bing_code_target_lang),
                                  content_type='application/x-www-form-urlencoded')
-
-        # TODO: Bing seems not to realize which target language is requested. Check params!!
-
         if self.options.dump:
             return content
 
         content = json.loads(content)
-        if not content:
-            return '[ERROR] Could not parse json response'
-
         response = BingTranslatorResponse(content)
 
-        # TODO: Show Transliteration
+        # Perform additional requests
+        if self.options.show_original_phonetics:
+            content = self.http_post(self.get_endpoint('translate'),
+                                     self.request_params(text, response.identified_lang, response.identified_lang),
+                                     content_type='application/x-www-form-urlencoded')
+            content = json.loads(content)
+            response.ingest_original_phonetics_response(content)
+
+        # Update source language
+        if code_source_lang == 'auto' and response.identified_lang:
+            code_source_lang = _map_from_bing_lang_code(response.identified_lang)
 
         if is_verbose:
-            return self.format_verbose(response)
+            return self.format_verbose(response, text, code_host_lang, code_source_lang, code_target_lang)
         else:
             return self.format_brief(response, is_phonetic, code_target_lang)
 
-    def format_verbose(self, response: BingTranslatorResponse):
+    def format_verbose(self, response: BingTranslatorResponse, text_input: str, code_host_lang: str,
+                       code_source_lang: str, code_target_lang: str) -> str:
         """Format engine response verbosely"""
         result_parts = []
-        pass
 
-    def format_brief(self, response: BingTranslatorResponse, is_phonetic: bool, code_target_lang: str) -> str:
+        # Show original text
+        if self.options.show_original:
+            self.if_debug(result_parts, 'display original text & phonetics')
+            result_parts.append(prettify('original', text_input))
+            if (self.options.show_original_phonetics and response.orig_phonetics
+                    and response.orig_phonetics != text_input):
+                result_parts.append(prettify('original-phonetics',
+                                             format_phonetics(response.orig_phonetics, code_source_lang)))
+
+        # Show translation
+        if self.options.show_translation:
+            result_parts.append('')
+            self.if_debug(result_parts, 'display major translation & phonetics')
+            result_parts.append(prettify('translation', response.translation['text']))
+            if self.options.show_translation_phonetics and response.translation['transliteration']:
+                result_parts.append(prettify('translation-phonetics',
+                                             format_phonetics(response.translation['transliteration'],
+                                                              code_target_lang)))
+
+        # Show language direction
+        if self.options.show_languages:
+            result_parts.append('')
+            self.if_debug(result_parts, 'display source language -> target language')
+            result_parts.append(prettify('languages', '[ ') +
+                                prettify('languages-source', get_endonym(code_source_lang)) +
+                                prettify('languages', ' -> ') +
+                                prettify('languages-target', get_endonym(code_target_lang)) +
+                                prettify('languages', ' ]'))
+
+        # Show Dictionary not implemented. Bing Dict API will be shut down in August 2025.
+
+        return '\n'.join(result_parts)
+
+    @staticmethod
+    def format_brief(response: BingTranslatorResponse, is_phonetic: bool, code_target_lang: str) -> str:
         """Format engine response briefly"""
 
-        if len(response.translations) == 0:
+        if not response.translation:
             return prettify('error', 'Brief formatting failed, engine response likely invalid - rare error')
 
-        translation, transliteration = response.translations[0]['text'], response.translations[0].get('transliteration')
+        translation, transliteration = response.translation['text'], response.translation.get('transliteration')
         if is_phonetic and transliteration and translation != transliteration:
             result = prettify('brief-translation-phonetics', transliteration)
         else:

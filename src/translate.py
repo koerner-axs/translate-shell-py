@@ -73,6 +73,11 @@ def postprocess(text: str) -> str:
     return text
 
 
+def format_phonetics(phonetics: str, lang: str) -> str:
+    """Format phonetics display. Add /slashes/ for IPA phonemic notations and (parentheses) for others"""
+    return f'/{phonetics}/' if lang == 'en' else f'({phonetics})'
+
+
 class TranslationEngine(metaclass=abc.ABCMeta):
     """Main translation engine class"""
 

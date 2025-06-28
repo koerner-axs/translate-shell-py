@@ -5,7 +5,7 @@ from typing import override, List
 
 from src.langdata import get_code, get_endonym, show_definitions_of, show_translations_of
 from src.misc import prettify
-from src.translate import TranslationEngine, _escape_text
+from src.translate import TranslationEngine, _escape_text, format_phonetics
 
 
 @dataclass
@@ -159,11 +159,6 @@ class GoogleTranslateResponse:
         return gendered
 
 
-def _format_phonetics(phonetics: str, lang: str) -> str:
-    """Format phonetics display. Add /slashes/ for IPA phonemic notations and (parentheses) for others"""
-    return f'/{phonetics}/' if lang == 'en' else f'({phonetics})'
-
-
 class GoogleTranslationEngine(TranslationEngine):
     """Google Translate API implementation"""
 
@@ -224,9 +219,6 @@ class GoogleTranslationEngine(TranslationEngine):
             return content
 
         content = json.loads(content)
-        if not content:
-            return "[ERROR] Could not parse json response"
-
         response = GoogleTranslateResponse(content)
 
         # Set identified language
@@ -248,16 +240,17 @@ class GoogleTranslationEngine(TranslationEngine):
         # Show original text
         if self.options.show_original and len(response.original) > 0:
             self.if_debug(result_parts, 'display original text & phonetics')
-            result_parts.append(prettify('original', " ".join(response.original)))
+            result_parts.append(prettify('original', ' '.join(response.original)))
             if self.options.show_original_phonetics and len(response.orig_phonetics) > 0:
-                result_parts.append(_format_phonetics(' '.join(response.orig_phonetics), code_source_lang))
+                result_parts.append(prettify('original-phonetics',
+                                             format_phonetics(' '.join(response.orig_phonetics), code_source_lang)))
 
         # Show translation
         if self.options.show_translation:
             result_parts.append('')
             self.if_debug(result_parts, 'display major translation & phonetics')
             if len(response.gendered) > 0:
-                # TODO: check if the wrong way around
+                # TODO: check if the wrong way around (error in parsing)
                 result_parts.append(prettify('prompt-message', '(♂) ') +
                                     prettify('translation', response.gendered.get('male', '')))
                 result_parts.append(prettify('prompt-message', '(♀) ') +
@@ -265,7 +258,8 @@ class GoogleTranslationEngine(TranslationEngine):
             else:
                 result_parts.append(prettify('translation', ' '.join(response.translations)))
             if self.options.show_translation_phonetics and response.phonetics:
-                result_parts.append(_format_phonetics(' '.join(response.phonetics), code_target_lang))
+                result_parts.append(prettify('translation-phonetics',
+                                             format_phonetics(' '.join(response.phonetics), code_target_lang)))
 
         if self.options.show_prompt_message or self.options.show_languages:
             result_parts.append('')
