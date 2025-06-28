@@ -9,6 +9,7 @@ from config import load_init_script
 from engines.google_translate import GoogleTranslationEngine
 from interactive import run_interactive, run_emacs_mode
 from misc import _yn_to_bool, _get_user_lang, _parse_language_codes, _parse_shortcut_format
+from src.audio import init_audio_player
 from src.engines.bing_translator import BingTranslatorEngine
 from translate import TranslationEngine
 from unimpl import _get_version
@@ -131,15 +132,15 @@ def create_parser() -> argparse.ArgumentParser:
 
     # Audio options
     audio_group = parser.add_argument_group('Audio Options')
-    audio_group.add_argument('-p', '--play', action='store_const', const=1, dest='play_mode',
+    audio_group.add_argument('-p', '--play', action='store_const', const=1, dest='audio_mode',
                              default=0, help='Play audio')
-    audio_group.add_argument('--speak', action='store_const', const=2, dest='play_mode',
+    audio_group.add_argument('--speak', action='store_const', const=2, dest='audio_mode',
                              help='Speak translation')
     audio_group.add_argument('-n', '--narrator', metavar='VOICE', default='female',
                              help='Voice for narration (default: female)')
-    audio_group.add_argument('--player', metavar='PROGRAM', default=os.environ.get('PLAYER'),
-                             help='Audio player program')
-    audio_group.add_argument('--no-play', action='store_const', const=0, dest='play_mode',
+    audio_group.add_argument('--audio-player', metavar='PROGRAM', default=os.environ.get('PLAYER'),
+                             dest='audio_player', help='Audio player program')
+    audio_group.add_argument('--no-play', action='store_const', const=0, dest='audio_mode',
                              help='Disable audio playback')
     audio_group.add_argument('--no-translate', action='store_true', default=False,
                              help='Skip translation, only play audio')
@@ -323,8 +324,8 @@ def _post_process_options(options) -> argparse.Namespace:
         options.download_audio = True
 
     # Handle narrator/player with play mode
-    if (options.narrator != 'female' or options.player) and options.play_mode == 0:
-        options.play_mode = 1
+    if (options.narrator != 'female' or options.audio_player) and options.audio_mode == 0:
+        options.audio_mode = 1
 
     return options
 
@@ -349,7 +350,7 @@ class TranslationCLI:
             'bing': BingTranslatorEngine,
         }
 
-    def _init_misc(self):
+    def init_misc(self):
         """Initialize miscellaneous settings"""
         # Set screen width if not already set
         if not self.options.width:
@@ -429,8 +430,9 @@ class TranslationCLI:
             if self.options.info_only is not None:
                 return self._handle_info_request()
 
-            self._init_misc()
+            self.init_misc()
             self.init_engine()
+            self.init_audio_engine()
 
             if self.options.interactive and not self.options.no_rlwrap:
                 return run_interactive()
@@ -453,6 +455,10 @@ class TranslationCLI:
         # Construct engine
         self.engine = self.engines[self.options.engine](self.options)
         self.engine.initialize()
+
+    def init_audio_engine(self):
+        if not self.options.audio_player:
+            self.options.audio_player = init_audio_player()
 
 
 def main():

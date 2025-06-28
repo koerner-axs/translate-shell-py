@@ -5,12 +5,15 @@ import re
 import subprocess
 import sys
 import urllib
-from typing import List
+from dataclasses import dataclass
+from gettext import translation
+from typing import List, Tuple
 from urllib.parse import quote
 
 import requests
 from requests.auth import HTTPBasicAuth
 
+from src.audio import play_remote_audio
 from src.langdata import get_code, is_rtl, get_name
 from src.misc import _has_fribidi
 from src.theme import prettify
@@ -34,6 +37,13 @@ def _warning(message: str) -> None:
 def format_phonetics(phonetics: str, lang: str) -> str:
     """Format phonetics display. Add /slashes/ for IPA phonemic notations and (parentheses) for others"""
     return f'/{phonetics}/' if lang == 'en' else f'({phonetics})'
+
+
+@dataclass
+class Translation:
+    tty_output: str
+    identified_lang: str
+    audio_fragments: List[Tuple[str, str]]
 
 
 class TranslationEngine(metaclass=abc.ABCMeta):
@@ -197,7 +207,7 @@ class TranslationEngine(metaclass=abc.ABCMeta):
                         #, to_speech: bool = False
                         #, return_playlist: Optional[List] = None
                         #, return_il: Optional[List] = None
-                        ) -> (str, str):
+                        ) -> Translation:
         """Get the translation of a string"""
         return self._translate(text, sl, tl, hl, is_verbose)
 
@@ -260,29 +270,30 @@ class TranslationEngine(metaclass=abc.ABCMeta):
             elif inline and (text.startswith('http://') or text.startswith('https://')):
                 self.web_translation(text, source_lang, target_lang, host_lang)
             else:
-                playlist = []
 
                 if not self.options.no_translate:
-                    output, identified_lang = self.get_translation(
+                    translation = self.get_translation(
                         text, source_lang, target_lang, host_lang,
                         self.options.verbose,
                         #self.options.play_mode or self.options.download_audio,
                         #playlist, il
                     )
-                    self.print_output(output)
+                    self.print_output(translation.tty_output)
                 else:
-                    identified_lang = source_lang if source_lang != 'auto' else 'en'
+                    # TODO: test if this works and has a use case
+                    translation = Translation('', source_lang if source_lang != 'auto' else 'en', [])
 
-                identified_lang = identified_lang or 'en'
-                self._produce_audio(playlist, text, identified_lang)
+                translation.identified_lang = translation.identified_lang or 'en'
 
-                if self.options.download_audio:
-                    if self.options.play_mode != 2 and not self.options.no_translate:
-                        if playlist:
-                            last_item = playlist[-1]
-                            self._download_audio(last_item.get('text', ''), last_item.get('target_lang', ''))
-                    else:
-                        self._download_audio(text, identified_lang)
+                self.play_audio_multiple(translation.audio_fragments)
+
+                #if self.options.download_audio:
+                #    if self.options.play_mode != 2 and not self.options.no_translate:
+                #        if playlist:
+                #            last_item = playlist[-1]
+                #            self._download_audio(last_item.get('text', ''), last_item.get('target_lang', ''))
+                #    else:
+                #        self._download_audio(text, identified_lang)
 
     def translate_from_all_source_langs(self, text: str, inline: bool = False) -> None:
         """Translate the source text from all source languages"""
@@ -327,6 +338,19 @@ class TranslationEngine(metaclass=abc.ABCMeta):
         else:
             _error(f'[ERROR] File not found: {input_source}')
 
+    def play_audio_multiple(self, fragments: List[Tuple[str, str]]):
+        if self.options.audio_mode > 0 and self.options.audio_player:
+            if self.options.audio_mode == 1:
+                for text, lang in fragments:
+                    self.play_audio_single(text, lang)
+            elif self.options.audio_mode == 2:
+                self.play_audio_single(*fragments[-1])
+
+    def play_audio_single(self, text: str, lang: str):
+        """Produce audio for text"""
+        url = self.tts_url(text, lang)
+        play_remote_audio(self.options.audio_player, url)
+
     def if_debug(self, result_parts: List[str], text: str):
         if self.options.debug:
             result_parts.append(prettify('debug', text))
@@ -340,7 +364,7 @@ class TranslationEngine(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def tts_url(self, text: str, tl: str):
+    def tts_url(self, text: str, lang: str):
         """Generate text-to-speech URL - to be implemented by specific engines"""
         pass
 
@@ -356,15 +380,11 @@ class TranslationEngine(metaclass=abc.ABCMeta):
                    #, to_speech: bool
                    #, return_playlist: Optional[List]
                    #, return_il: Optional[List]
-                   ) -> (str, str):
+                   ) -> Translation:
         """Core translation function - to be implemented by specific engines.
 
         :return: Tuple[str, str]: formatted translator output and the identified language of the input"""
         pass
-
-    def _produce_audio(self, playlist: List, text: str, lang: str) -> None:
-        """Produce audio for text"""
-        pass  # Placeholder
 
     def _download_audio(self, text: str, lang: str) -> None:
         """Download audio for text"""

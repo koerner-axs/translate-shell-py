@@ -1,11 +1,11 @@
 import argparse
 import json
 from dataclasses import dataclass
-from typing import override, List
+from typing import override, List, Tuple
 
 from src.langdata import get_code, get_endonym, show_definitions_of, show_translations_of
 from src.theme import prettify
-from src.translate import TranslationEngine, _escape_text, format_phonetics
+from src.translate import TranslationEngine, _escape_text, format_phonetics, Translation
 
 
 @dataclass
@@ -100,8 +100,11 @@ class GoogleTranslateResponse:
                 word_class, entries = x[0], x[2]
                 entries_for_class = []
                 for y in entries:
-                    word, back_translations, article = y[0], y[1], y[4]
+                    article = None
                     if y and len(y) >= 2 and y[0] and y[1]:
+                        word, back_translations = y[0], y[1]
+                        if len(y) >= 5:
+                            article = y[4]
                         entries_for_class.append(DictionaryEntry(word, article, back_translations))
                 dictionary[word_class] = entries_for_class
         return dictionary
@@ -229,10 +232,10 @@ class GoogleTranslationEngine(TranslationEngine):
                 f'&q={_escape_text(text)}')
 
     @override
-    def tts_url(self, text: str, tl: str) -> str:
+    def tts_url(self, text: str, lang: str) -> str:
         """Generate text-to-speech URL"""
-        return (f'https://{None}/translate_tts?ie=UTF-8&client=gtx'
-                f'&tl={tl}&q={_escape_text(text)}')
+        return (f'https://translate.google.com/translate_tts?ie=UTF-8&client=gtx'
+                f'&tl={lang}&q={_escape_text(text)}')
 
     @override
     def web_translate_url(self, uri: str, sl: str, tl: str, hl: str) -> str:
@@ -246,7 +249,7 @@ class GoogleTranslationEngine(TranslationEngine):
                    #, to_speech: bool = False
                    #, return_playlist: Optional[List] = None
                    #, return_il: Optional[List] = None
-                   ) -> (str, str):
+                   ) -> Translation:
         """Core translation function"""
 
         # Check if target language is phonetic
@@ -264,7 +267,7 @@ class GoogleTranslationEngine(TranslationEngine):
         content = self.http_get(url)
 
         if self.options.dump:
-            return content
+            return Translation(content, '', [])
 
         content = json.loads(content)
         response = GoogleTranslateResponse(content)
@@ -279,9 +282,12 @@ class GoogleTranslationEngine(TranslationEngine):
         if is_verbose:
             output = self.format_verbose(response, code_host_lang, code_source_lang, code_target_lang)
         else:
-            output = self.format_brief(response, is_phonetic, code_target_lang)
+            output = self.format_brief(response, is_phonetic)
 
-        return output, code_source_lang
+        audio_fragments = self.compile_audio_fragments(response, is_verbose, code_host_lang, code_source_lang,
+                                                       code_target_lang)
+
+        return Translation(output, code_source_lang, audio_fragments)
 
     def format_verbose(self, response: GoogleTranslateResponse, code_host_lang, code_source_lang, code_target_lang) -> str:
         """Format engine response verbosely"""
@@ -340,38 +346,32 @@ class GoogleTranslationEngine(TranslationEngine):
         self.if_debug(result_parts, 'display original dictionary entries')
 
         # Show dictionary
-        result_parts.append('')
-        self.if_debug(result_parts, 'display dictionary entries')
-        for word_class, dictionary in response.dictionary.items():
-            result_parts.append(prettify('dictionary-word-class', word_class))
-            for entry in dictionary:
-                # TODO: missing RTL support
-                word = f'({entry.article}) {entry.word}' if entry.article else entry.word
-                result_parts.append(self.indent(1, prettify('dictionary-word', word)))
-                pretty_back_translations = [prettify('dictionary-explanations-item', x) for x in entry.back_translations]
-                result_parts.append(self.indent(2, prettify('basic', ', ').join(pretty_back_translations)))
+        if len(response.dictionary) > 0:
+            result_parts.append('')
+            self.if_debug(result_parts, 'display dictionary entries')
+            for word_class, dictionary in response.dictionary.items():
+                result_parts.append(prettify('dictionary-word-class', word_class))
+                for entry in dictionary:
+                    # TODO: missing RTL support
+                    word = f'({entry.article}) {entry.word}' if entry.article else entry.word
+                    result_parts.append(self.indent(1, prettify('dictionary-word', word)))
+                    pretty_back_translations = [prettify('dictionary-explanations-item', x) for x in entry.back_translations]
+                    result_parts.append(self.indent(2, prettify('basic', ', ').join(pretty_back_translations)))
 
         # Show alternative translations
-        result_parts.append('')
-        self.if_debug(result_parts, 'display alternative translations')
-        for original, translations in response.alternatives.items():
-            result_parts.append(prettify('alternatives-original', original))
-            # TODO: missing RTL support, or am I? I feel like the translation should be adjusted to the host lang or src
-            pretty_translations = [prettify('alternatives-translations-item', x) for x in translations]
-            result_parts.append(self.indent(1, prettify('basic', ', ').join(pretty_translations)))
-
-        # TODO: implement these features or remove
-        #if to_speech and return_playlist is not None:
-        #    return_playlist.extend([
-        #        {'text': ' '.join(original), 'tl': source_lang},
-        #        {'text': self._show_translations_of(host_lang, ''), 'tl': code_host_lang},
-        #        {'text': translation, 'tl': code_target_lang}
-        #    ])
+        if len(response.alternatives) > 0:
+            result_parts.append('')
+            self.if_debug(result_parts, 'display alternative translations')
+            for original, translations in response.alternatives.items():
+                result_parts.append(prettify('alternatives-original', original))
+                # TODO: missing RTL support, or am I? I feel like the translation should be adjusted to the host lang or src
+                pretty_translations = [prettify('alternatives-translations-item', x) for x in translations]
+                result_parts.append(self.indent(1, prettify('basic', ', ').join(pretty_translations)))
 
         return '\n'.join(result_parts)
 
     @staticmethod
-    def format_brief(response: GoogleTranslateResponse, is_phonetic: bool, code_target_lang: str) -> str:
+    def format_brief(response: GoogleTranslateResponse, is_phonetic: bool) -> str:
         """Format engine response briefly"""
 
         if is_phonetic and len(response.phonetics) > 0:
@@ -381,11 +381,21 @@ class GoogleTranslationEngine(TranslationEngine):
         else:
             result = prettify('error', 'Brief formatting failed, engine response likely invalid - rare error')
 
-        # TODO: implement these features or remove
-        # if to_speech and return_playlist is not None:
-        #    return_playlist.append({
-        #        'text': translation,
-        #        'tl': code_target_lang
-        #    })
-
         return result
+
+    @staticmethod
+    def compile_audio_fragments(response: GoogleTranslateResponse, is_verbose: bool, code_host_lang: str,
+                                code_source_lang: str, code_target_lang: str) -> List[Tuple[str, str]]:
+        fragments = []
+        if is_verbose:
+            # Check if the '%s' is at the start of the localized 'Translation of:' prompt...
+            prompt: str = show_translations_of(code_host_lang)
+            if prompt.startswith('%s'):
+                # ... if so, then we should play the original text first, then the prompt
+                fragments.append((' '.join(response.originals), code_source_lang))
+                fragments.append((prompt.replace('%s', '').lstrip(), code_host_lang))
+            else:
+                fragments.append((prompt.replace('%s', '').rstrip(), code_host_lang))
+                fragments.append((' '.join(response.originals), code_source_lang))
+        fragments.append((', '.join(response.translations), code_target_lang))
+        return fragments

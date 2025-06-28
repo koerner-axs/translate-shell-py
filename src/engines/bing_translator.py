@@ -6,7 +6,7 @@ from typing import override
 
 from src.langdata import get_code, get_endonym
 from src.theme import prettify
-from src.translate import TranslationEngine, _escape_text, format_phonetics
+from src.translate import TranslationEngine, _escape_text, format_phonetics, Translation
 
 
 def first_match(pattern: str, data: str) -> re.Match | None:
@@ -144,7 +144,7 @@ class BingTranslatorEngine(TranslationEngine):
                    #, to_speech: bool
                    #, return_playlist: Optional[List]
                    #, return_il: Optional[List]
-                   ) -> (str, str):
+                   ) -> Translation:
         """Core translation function"""
 
         # Check if target language is phonetic
@@ -164,7 +164,7 @@ class BingTranslatorEngine(TranslationEngine):
                                  self.request_params(text, bing_code_source_lang, bing_code_target_lang),
                                  content_type='application/x-www-form-urlencoded')
         if self.options.dump:
-            return content
+            return Translation(content, '', [])
 
         content = json.loads(content)
         response = BingTranslatorResponse(content)
@@ -186,7 +186,7 @@ class BingTranslatorEngine(TranslationEngine):
         else:
             output = self.format_brief(response, is_phonetic, code_target_lang)
 
-        return output, code_source_lang
+        return Translation(output, code_source_lang, audio_fragments)
 
     def format_verbose(self, response: BingTranslatorResponse, text_input: str, code_host_lang: str,
                        code_source_lang: str, code_target_lang: str) -> str:
