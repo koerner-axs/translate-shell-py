@@ -49,8 +49,26 @@ class BingAccessToken:
 
 
 class BingTranslatorResponse:
-    def __init__(self, content: str):
-        print(content)
+    def __init__(self, content):
+        self.identified_lang = content[0]['detectedLanguage']['language']
+        # TODO: do not print phonetics if equal to translation (redundant)
+        self.translations = self._parse_translations(content)
+
+    @staticmethod
+    def _parse_translations(content):
+        if len(content) < 1 or not content[0] or 'translations' not in content[0]:
+            return []
+        content = content[0]['translations']
+
+        translations = []
+        for x in content:
+            if 'text' in x:
+                translation = {'text': x['text']}
+                if ('transliteration' in x and (transl_dict := x['transliteration']) and 'text' in transl_dict
+                    and (transliteration := transl_dict['text'])) and transliteration:
+                    translation['transliteration'] = transliteration
+                translations.append(translation)
+        return translations
 
 
 # See BingTranslator.awk::225ff.
@@ -159,21 +177,31 @@ class BingTranslatorEngine(TranslationEngine):
         if is_verbose:
             return self.format_verbose(response)
         else:
-            return self.format_brief(response)
+            return self.format_brief(response, is_phonetic, code_target_lang)
 
     def format_verbose(self, response: BingTranslatorResponse):
         """Format engine response verbosely"""
         result_parts = []
         pass
 
-    def format_brief(self, response: BingTranslatorResponse):
+    def format_brief(self, response: BingTranslatorResponse, is_phonetic: bool, code_target_lang: str) -> str:
         """Format engine response briefly"""
-        pass
 
-    def _is_debug(self, result_parts: List[str], text: str):
-        if self.options.debug:
-            result_parts.append(prettify('debug', text))
+        if len(response.translations) == 0:
+            return prettify('error', 'Brief formatting failed, engine response likely invalid - rare error')
 
-    def indent(self, tabs: int, text: str):
-        tab_width = self.options.indent or 4
-        return ' ' * (tabs * tab_width) + text
+        translation, transliteration = response.translations[0]['text'], response.translations[0].get('transliteration')
+        if is_phonetic and transliteration and translation != transliteration:
+            result = prettify('brief-translation-phonetics', transliteration)
+        else:
+            result = prettify('brief-translation', translation)
+
+        # TODO: implement these features or remove
+        # TODO: warning: code_target_lang is not the bing language code
+        # if to_speech and return_playlist is not None:
+        #    return_playlist.append({
+        #        "text": translation,
+        #        "tl": code_target_lang
+        #    })
+
+        return result

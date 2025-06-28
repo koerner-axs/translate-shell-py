@@ -1,6 +1,5 @@
 import argparse
 import json
-import urllib.parse
 from dataclasses import dataclass
 from typing import override, List
 
@@ -248,7 +247,7 @@ class GoogleTranslationEngine(TranslationEngine):
 
         # Show original text
         if self.options.show_original and len(response.original) > 0:
-            self._if_debug(result_parts, 'display original text & phonetics')
+            self.if_debug(result_parts, 'display original text & phonetics')
             result_parts.append(prettify('original', " ".join(response.original)))
             if self.options.show_original_phonetics and len(response.orig_phonetics) > 0:
                 result_parts.append(_format_phonetics(' '.join(response.orig_phonetics), code_source_lang))
@@ -256,7 +255,7 @@ class GoogleTranslationEngine(TranslationEngine):
         # Show translation
         if self.options.show_translation:
             result_parts.append('')
-            self._if_debug(result_parts, 'display major translation & phonetics')
+            self.if_debug(result_parts, 'display major translation & phonetics')
             if len(response.gendered) > 0:
                 # TODO: check if the wrong way around
                 result_parts.append(prettify('prompt-message', '(♂) ') +
@@ -273,7 +272,7 @@ class GoogleTranslationEngine(TranslationEngine):
 
         # Show prompt
         if self.options.show_prompt_message:
-            self._if_debug(result_parts, 'display prompt message')
+            self.if_debug(result_parts, 'display prompt message')
             prompt_message = None
             if len(response.dictionary) > 0:
                 prompt_message = show_definitions_of(code_host_lang)
@@ -286,7 +285,7 @@ class GoogleTranslationEngine(TranslationEngine):
 
         # Show language direction
         if self.options.show_languages:
-            self._if_debug(result_parts, 'display source language -> target language')
+            self.if_debug(result_parts, 'display source language -> target language')
             result_parts.append(prettify('languages', '[ ') +
                                 prettify('languages-source', get_endonym(code_source_lang)) +
                                 prettify('languages', ' -> ') +
@@ -294,11 +293,11 @@ class GoogleTranslationEngine(TranslationEngine):
                                 prettify('languages', ' ]'))
 
         # TODO: Show original dictionary
-        self._if_debug(result_parts, 'display original dictionary entries')
+        self.if_debug(result_parts, 'display original dictionary entries')
 
         # Show dictionary
         result_parts.append('')
-        self._if_debug(result_parts, 'display dictionary entries')
+        self.if_debug(result_parts, 'display dictionary entries')
         for word_class, dictionary in response.dictionary.items():
             result_parts.append(prettify('dictionary-word-class', word_class))
             for entry in dictionary:
@@ -310,7 +309,7 @@ class GoogleTranslationEngine(TranslationEngine):
 
         # Show alternative translations
         result_parts.append('')
-        self._if_debug(result_parts, 'display alternative translations')
+        self.if_debug(result_parts, 'display alternative translations')
         for original, translations in response.alternatives.items():
             result_parts.append(prettify('alternatives-original', original))
             # TODO: missing RTL support, or am I? I feel like the translation should be adjusted to the host lang or src
@@ -346,11 +345,3 @@ class GoogleTranslationEngine(TranslationEngine):
         #    })
 
         return result
-
-    def _if_debug(self, result_parts: List[str], text: str):
-        if self.options.debug:
-            result_parts.append(prettify('debug', text))
-
-    def indent(self, tabs: int, text: str):
-        tab_width = self.options.indent or 4
-        return ' ' * (tabs * tab_width) + text

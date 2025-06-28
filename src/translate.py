@@ -408,6 +408,14 @@ class TranslationEngine(metaclass=abc.ABCMeta):
         else:
             _error(f'[ERROR] File not found: {input_source}')
 
+    def if_debug(self, result_parts: List[str], text: str):
+        if self.options.debug:
+            result_parts.append(prettify('debug', text))
+
+    def indent(self, tabs: int, text: str):
+        tab_width = self.options.indent or 4
+        return ' ' * (tabs * tab_width) + text
+
     @abc.abstractmethod
     def initialize(self):
         pass

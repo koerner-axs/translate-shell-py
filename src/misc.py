@@ -98,6 +98,8 @@ STYLES = {
 #     Option["sgr-prompt"] = "bold"
 
 # TODO: Replace when a theme system is implemented
+STYLES['brief-translation'] = STYLES['basic']
+STYLES['brief-translation-phonetics'] = STYLES['basic']
 STYLES['original'] = STYLES['basic']
 STYLES['prompt-message'] = STYLES['basic']
 STYLES['languages'] = STYLES['basic']
