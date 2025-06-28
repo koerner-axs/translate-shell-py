@@ -17,10 +17,10 @@ class DictionaryEntry:
 
 class GoogleTranslateResponse:
     def __init__(self, content):
-        self.translations = [x[0] for x in content[0] if x and x[0]] if content[0] else []
-        self.original = [x[1] for x in content[0] if x and x[1]] if content[0] else []
-        self.phonetics = [x[2] for x in content[0] if x and x[2]] if content[0] else []
-        self.orig_phonetics = [x[3] for x in content[0] if x and x[3]] if content[0] else []
+        self.translations = self._parse_translations(content)
+        self.originals = self._parse_originals(content)
+        self.phonetics = self._parse_phonetics(content)
+        self.orig_phonetics = self._parse_orig_phonetics(content)
 
         self.dictionary = self._parse_dictionary(content)
         self.alternatives = self._parse_alternatives(content)
@@ -39,6 +39,54 @@ class GoogleTranslateResponse:
         self.orig_examples = self._parse_orig_examples(content)
         self.orig_see_also = self._parse_orig_see_also(content)
         self.gendered = self._parse_gendered(content)
+
+    @staticmethod
+    def _parse_translations(content):
+        if len(content) < 1 or not content[0]:
+            return []
+        content = content[0]
+
+        translations = []
+        for x in content:
+            if x and len(x) >= 1 and x[0]:
+                translations.append(x[0])
+        return translations
+
+    @staticmethod
+    def _parse_originals(content):
+        if len(content) < 1 or not content[0]:
+            return []
+        content = content[0]
+
+        originals = []
+        for x in content:
+            if x and len(x) >= 2 and x[1]:
+                originals.append(x[1])
+        return originals
+
+    @staticmethod
+    def _parse_phonetics(content):
+        if len(content) < 1 or not content[0]:
+            return []
+        content = content[0]
+
+        phonetics = []
+        for x in content:
+            if x and len(x) >= 3 and x[2]:
+                phonetics.append(x[2])
+        return phonetics
+
+    @staticmethod
+    def _parse_orig_phonetics(content):
+        if len(content) < 1 or not content[0]:
+            return []
+        content = content[0]
+
+        orig_phonetics = []
+        for x in content:
+            if x and len(x) >= 4 and x[3]:
+                orig_phonetics.append(x[3])
+        return orig_phonetics
 
     @staticmethod
     def _parse_dictionary(content):
@@ -223,7 +271,7 @@ class GoogleTranslationEngine(TranslationEngine):
 
         # Set identified language
         # TODO: check this holds, maybe refactor to reduce implicit knowledge, referring to identified_langs
-        if not code_source_lang and len(response.identified_langs) >= 1:
+        if code_source_lang == 'auto' and len(response.identified_langs) >= 1:
             code_source_lang = response.identified_langs[0]
         if not code_target_lang and len(response.identified_langs) >= 2:
             code_target_lang = response.identified_langs[1]
@@ -238,9 +286,9 @@ class GoogleTranslationEngine(TranslationEngine):
         result_parts = []
 
         # Show original text
-        if self.options.show_original and len(response.original) > 0:
+        if self.options.show_original and len(response.originals) > 0:
             self.if_debug(result_parts, 'display original text & phonetics')
-            result_parts.append(prettify('original', ' '.join(response.original)))
+            result_parts.append(prettify('original', ' '.join(response.originals)))
             if self.options.show_original_phonetics and len(response.orig_phonetics) > 0:
                 result_parts.append(prettify('original-phonetics',
                                              format_phonetics(' '.join(response.orig_phonetics), code_source_lang)))
@@ -267,15 +315,15 @@ class GoogleTranslationEngine(TranslationEngine):
         # Show prompt
         if self.options.show_prompt_message:
             self.if_debug(result_parts, 'display prompt message')
-            prompt_message = None
+            prompt_template = None
             if len(response.dictionary) > 0:
-                prompt_message = show_definitions_of(code_host_lang)
+                prompt_template = show_definitions_of(code_host_lang)
             elif len(response.alternatives) > 0:
-                prompt_message = show_translations_of(code_host_lang)
-            if prompt_message:
+                prompt_template = show_translations_of(code_host_lang)
+            if prompt_template:
                 # TODO: missing RTL support
-                result_parts.append(prettify('prompt-message', prompt_message + ' ') +
-                                    prettify('prompt-message-original', ' '.join(response.original)))
+                prompt = prompt_template % prettify('prompt-message-original', ' '.join(response.originals))
+                result_parts.append(prettify('prompt-message', prompt))
 
         # Show language direction
         if self.options.show_languages:
