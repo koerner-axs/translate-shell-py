@@ -6,7 +6,6 @@ import subprocess
 import sys
 import urllib
 from dataclasses import dataclass
-from gettext import translation
 from typing import List, Tuple
 from urllib.parse import quote
 

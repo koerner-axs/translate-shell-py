@@ -352,6 +352,10 @@ class TranslationCLI:
 
     def init_misc(self):
         """Initialize miscellaneous settings"""
+        # Enable color in the terminal on Windows
+        if os.name == 'nt':
+            os.system('color')
+
         # Set screen width if not already set
         if not self.options.width:
             try:
@@ -364,10 +368,71 @@ class TranslationCLI:
                 self.options.width = 64
 
         # Initialize browser if not set
+        # TODO: Is this necessary? It doesn't quite seem cross-platform. Looking at you Claude
         if not self.options.browser:
             import platform
             system = platform.system()
             self.options.browser = 'open' if system == 'Darwin' else 'xdg-open'
+
+    def init_engine(self):
+        if self.options.engine not in self.engines:
+            raise ValueError(f'Unknown engine: {self.options.engine}')
+        # Construct engine
+        self.engine = self.engines[self.options.engine](self.options)
+        self.engine.initialize()
+
+    def init_audio_engine(self):
+        if not self.options.audio_player:
+            self.options.audio_player = init_audio_player()
+
+    def run(self, args: Optional[List[str]] = None) -> int:
+        try:
+            self.options = parse_args(args)
+
+            if '--no-init' not in args:
+                load_init_script(self.options)
+
+            if self.options.info_only is not None:
+                return self._handle_info_request()
+
+            self.init_misc()
+            self.init_engine()
+            self.init_audio_engine()
+
+            if self.options.interactive and not self.options.no_rlwrap:
+                return run_interactive(self.options, self.engine)
+            elif self.options.emacs and not self.options.interactive and not self.options.no_rlwrap:
+                return run_emacs_mode()
+            else:
+                return self.run_single()
+
+        except KeyboardInterrupt:
+            return 130
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            if self.options.debug:
+                raise
+            return 1
+
+    def run_single(self) -> int:
+        text_args = self.options.text if 'text' in self.options else []
+
+        if len(text_args) > 1 and self.options.join_sentence:
+            text_args = [' '.join(text_args)]
+
+        if text_args:
+            for i, text in enumerate(text_args):
+                if self.options.verbose and i > 0:
+                    # Print separator between sources
+                    print('-' * (self.options.width or 50))
+                self.engine.translate_from_all_source_langs(text, inline=True)
+        else:
+            # Handle input from file or stdin
+            if not self.options.input:
+                self.options.input = sys.stdin
+            self.engine.translate_main()
+
+        return self.exit_code
 
     def _handle_info_request(self) -> int:
         """Handle information-only requests"""
@@ -400,66 +465,6 @@ class TranslationCLI:
             pass
         return self.exit_code
 
-    def run_single(self) -> int:
-        text_args = self.options.text if hasattr(self.options, 'text') else []
-
-        if len(text_args) > 1 and self.options.join_sentence:
-            text_args = [' '.join(text_args)]
-
-        if text_args:
-            for i, text in enumerate(text_args):
-                if self.options.verbose and i > 0:
-                    # Print separator between sources
-                    print('-' * (self.options.width or 50))
-                self.engine.translate_from_all_source_langs(text, inline=True)
-        else:
-            # Handle input from file or stdin
-            if not self.options.input:
-                self.options.input = sys.stdin
-            self.engine.translate_main()
-
-        return self.exit_code
-
-    def run(self, args: Optional[List[str]] = None) -> int:
-        try:
-            if '--no-init' not in args:
-                load_init_script(self.options)
-
-            self.options = parse_args(args)
-
-            if self.options.info_only is not None:
-                return self._handle_info_request()
-
-            self.init_misc()
-            self.init_engine()
-            self.init_audio_engine()
-
-            if self.options.interactive and not self.options.no_rlwrap:
-                return run_interactive()
-            elif self.options.emacs and not self.options.interactive and not self.options.no_rlwrap:
-                return run_emacs_mode()
-            else:
-                return self.run_single()
-
-        except KeyboardInterrupt:
-            return 130
-        except Exception as e:
-            print(f"Error: {e}", file=sys.stderr)
-            if self.options.debug:
-                raise
-            return 1
-
-    def init_engine(self):
-        if self.options.engine not in self.engines:
-            raise ValueError(f'Unknown engine: {self.options.engine}')
-        # Construct engine
-        self.engine = self.engines[self.options.engine](self.options)
-        self.engine.initialize()
-
-    def init_audio_engine(self):
-        if not self.options.audio_player:
-            self.options.audio_player = init_audio_player()
-
 
 def main():
     cli = TranslationCLI()
@@ -467,6 +472,4 @@ def main():
 
 
 if __name__ == '__main__':
-    if os.name == 'nt':
-        os.system('color')
     sys.exit(main())
