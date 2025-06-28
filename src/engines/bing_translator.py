@@ -2,17 +2,15 @@ import argparse
 import json
 import re
 from dataclasses import dataclass
-from typing import override, List, Optional
+from typing import override
 
 from src.langdata import get_code, get_endonym
-from src.misc import prettify
+from src.theme import prettify
 from src.translate import TranslationEngine, _escape_text, format_phonetics
 
 
 def first_match(pattern: str, data: str) -> re.Match | None:
-    for match in re.finditer(pattern, data):
-        return match
-    return None
+    return re.compile(pattern).search(data)
 
 
 @dataclass
@@ -146,7 +144,7 @@ class BingTranslatorEngine(TranslationEngine):
                    #, to_speech: bool
                    #, return_playlist: Optional[List]
                    #, return_il: Optional[List]
-                   ) -> str:
+                   ) -> (str, str):
         """Core translation function"""
 
         # Check if target language is phonetic
@@ -184,9 +182,11 @@ class BingTranslatorEngine(TranslationEngine):
             code_source_lang = _map_from_bing_lang_code(response.identified_lang)
 
         if is_verbose:
-            return self.format_verbose(response, text, code_host_lang, code_source_lang, code_target_lang)
+            output = self.format_verbose(response, text, code_host_lang, code_source_lang, code_target_lang)
         else:
-            return self.format_brief(response, is_phonetic, code_target_lang)
+            output = self.format_brief(response, is_phonetic, code_target_lang)
+
+        return output, code_source_lang
 
     def format_verbose(self, response: BingTranslatorResponse, text_input: str, code_host_lang: str,
                        code_source_lang: str, code_target_lang: str) -> str:

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import override, List
 
 from src.langdata import get_code, get_endonym, show_definitions_of, show_translations_of
-from src.misc import prettify
+from src.theme import prettify
 from src.translate import TranslationEngine, _escape_text, format_phonetics
 
 
@@ -220,25 +220,25 @@ class GoogleTranslationEngine(TranslationEngine):
 
     def request_url(self, text: str, sl: str, tl: str, hl: str) -> str:
         """Generate request URL for Google Translate"""
-        qc = "qc" if self.options.no_autocorrect else "qca"
+        qc = 'qc' if self.options.no_autocorrect else 'qca'
 
-        return (f"http://translate.googleapis.com/translate_a/single?client=gtx"
-                f"&ie=UTF-8&oe=UTF-8"
-                f"&dt=bd&dt=ex&dt=ld&dt=md&dt=rw&dt=rm&dt=ss&dt=t&dt=at&dt=gt"
-                f"&dt={qc}&sl={sl}&tl={tl}&hl={hl}"
-                f"&q={_escape_text(text)}")
+        return (f'http://translate.googleapis.com/translate_a/single?client=gtx'
+                f'&ie=UTF-8&oe=UTF-8'
+                f'&dt=bd&dt=ex&dt=ld&dt=md&dt=rw&dt=rm&dt=ss&dt=t&dt=at&dt=gt'
+                f'&dt={qc}&sl={sl}&tl={tl}&hl={hl}'
+                f'&q={_escape_text(text)}')
 
     @override
     def tts_url(self, text: str, tl: str) -> str:
         """Generate text-to-speech URL"""
-        return (f"https://{self.http_host}/translate_tts?ie=UTF-8&client=gtx"
-                f"&tl={tl}&q={_escape_text(text)}")
+        return (f'https://{None}/translate_tts?ie=UTF-8&client=gtx'
+                f'&tl={tl}&q={_escape_text(text)}')
 
     @override
     def web_translate_url(self, uri: str, sl: str, tl: str, hl: str) -> str:
         """Generate web translation URL"""
-        return (f"https://translate.google.com/translate?"
-                f"hl={hl}&sl={sl}&tl={tl}&u={uri}")
+        return (f'https://translate.google.com/translate?'
+                f'hl={hl}&sl={sl}&tl={tl}&u={uri}')
 
     @override
     def _translate(self, text: str, source_lang: str, target_lang: str, host_lang: str
@@ -246,7 +246,7 @@ class GoogleTranslationEngine(TranslationEngine):
                    #, to_speech: bool = False
                    #, return_playlist: Optional[List] = None
                    #, return_il: Optional[List] = None
-                   ) -> str:
+                   ) -> (str, str):
         """Core translation function"""
 
         # Check if target language is phonetic
@@ -277,9 +277,11 @@ class GoogleTranslationEngine(TranslationEngine):
             code_target_lang = response.identified_langs[1]
 
         if is_verbose:
-            return self.format_verbose(response, code_host_lang, code_source_lang, code_target_lang)
+            output = self.format_verbose(response, code_host_lang, code_source_lang, code_target_lang)
         else:
-            return self.format_brief(response, is_phonetic, code_target_lang)
+            output = self.format_brief(response, is_phonetic, code_target_lang)
+
+        return output, code_source_lang
 
     def format_verbose(self, response: GoogleTranslateResponse, code_host_lang, code_source_lang, code_target_lang) -> str:
         """Format engine response verbosely"""
@@ -361,9 +363,9 @@ class GoogleTranslationEngine(TranslationEngine):
         # TODO: implement these features or remove
         #if to_speech and return_playlist is not None:
         #    return_playlist.extend([
-        #        {"text": " ".join(original), "tl": source_lang},
-        #        {"text": self._show_translations_of(host_lang, ""), "tl": code_host_lang},
-        #        {"text": translation, "tl": code_target_lang}
+        #        {'text': ' '.join(original), 'tl': source_lang},
+        #        {'text': self._show_translations_of(host_lang, ''), 'tl': code_host_lang},
+        #        {'text': translation, 'tl': code_target_lang}
         #    ])
 
         return '\n'.join(result_parts)
@@ -373,17 +375,17 @@ class GoogleTranslationEngine(TranslationEngine):
         """Format engine response briefly"""
 
         if is_phonetic and len(response.phonetics) > 0:
-            result = prettify("brief-translation-phonetics", " ".join(response.phonetics))
+            result = prettify('brief-translation-phonetics', ' '.join(response.phonetics))
         elif len(response.translations) > 0:
-            result = prettify("brief-translation", " ".join(response.translations))
+            result = prettify('brief-translation', ' '.join(response.translations))
         else:
-            result = prettify("error", "Brief formatting failed, engine response likely invalid - rare error")
+            result = prettify('error', 'Brief formatting failed, engine response likely invalid - rare error')
 
         # TODO: implement these features or remove
         # if to_speech and return_playlist is not None:
         #    return_playlist.append({
-        #        "text": translation,
-        #        "tl": code_target_lang
+        #        'text': translation,
+        #        'tl': code_target_lang
         #    })
 
         return result

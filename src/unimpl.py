@@ -31,9 +31,3 @@ def _get_language_info(self, languages: List[str]) -> str:
 
 def _upgrade(self):
     print("Upgrade functionality would be implemented here")
-
-def _translate_text(self, text: str, inline: bool = False):
-    print(f"Would translate: {text} (inline={inline})")
-
-def _translate_main(self):
-    print("Main translation loop would be implemented here")
