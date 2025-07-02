@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 
-from src.theme import prettify
+from .theme import prettify
 
 # Description from source:
 # > Initialize all locales supported.

@@ -12,10 +12,10 @@ from urllib.parse import quote
 import requests
 from requests.auth import HTTPBasicAuth
 
-from src.audio import play_remote_audio
-from src.langdata import get_code, is_rtl, get_name
-from src.misc import _has_fribidi
-from src.theme import prettify
+from .audio import play_remote_audio
+from .langdata import get_code, is_rtl, get_name
+from .misc import _has_fribidi
+from .theme import prettify
 
 
 def _escape_text(text: str) -> str:
@@ -42,6 +42,7 @@ def format_phonetics(phonetics: str, lang: str) -> str:
 class Translation:
     tty_output: str
     identified_lang: str
+    target_lang: str
     audio_fragments: List[Tuple[str, str]]
 
 
@@ -200,16 +201,6 @@ class TranslationEngine(metaclass=abc.ABCMeta):
                 with open(output_file, 'a') as f:
                     f.write(string + '\n')
 
-    def get_translation(self, text: str, sl: str, tl: str, hl: str
-                        , is_verbose: bool = False
-                        # TODO: implement these features or remove
-                        #, to_speech: bool = False
-                        #, return_playlist: Optional[List] = None
-                        #, return_il: Optional[List] = None
-                        ) -> Translation:
-        """Get the translation of a string"""
-        return self._translate(text, sl, tl, hl, is_verbose)
-
     def file_translation(self, uri: str) -> None:
         """Translate a file"""
         # TODO: Test
@@ -221,7 +212,7 @@ class TranslationEngine(metaclass=abc.ABCMeta):
             self.options.input = file_match.group(1)
             self.options.verbose = False
 
-            self.translate_main()
+            self.translate_stdin()
 
             self.options.input = temp_input
             self.options.verbose = temp_verbose
@@ -240,7 +231,7 @@ class TranslationEngine(metaclass=abc.ABCMeta):
                 except Exception:
                     pass
 
-    def translate(self, text: str, source_lang: str, inline: bool = False) -> None:
+    def translate(self, text: str, source_lang: str, inline: bool = False) -> List[Translation]:
         """Translate the source text into all target languages"""
         # Check source language
         if not get_code(source_lang):
@@ -264,6 +255,7 @@ class TranslationEngine(metaclass=abc.ABCMeta):
                 separator = '-' * (self.options.width or 80)
                 self.print_output(prettify('target-separator', separator))
 
+            # TODO: what is this inline stuff?
             if inline and text.startswith('file://'):
                 self.file_translation(text)
             elif inline and (text.startswith('http://') or text.startswith('https://')):
@@ -271,7 +263,7 @@ class TranslationEngine(metaclass=abc.ABCMeta):
             else:
 
                 if not self.options.no_translate:
-                    translation = self.get_translation(
+                    translation = self._translate(
                         text, source_lang, target_lang, host_lang,
                         self.options.verbose,
                         #self.options.play_mode or self.options.download_audio,
@@ -286,6 +278,7 @@ class TranslationEngine(metaclass=abc.ABCMeta):
 
                 self.play_audio_multiple(translation.audio_fragments)
 
+                # TODO: implement audio downloading
                 #if self.options.download_audio:
                 #    if self.options.play_mode != 2 and not self.options.no_translate:
                 #        if playlist:
@@ -294,20 +287,8 @@ class TranslationEngine(metaclass=abc.ABCMeta):
                 #    else:
                 #        self._download_audio(text, identified_lang)
 
-    def translate_from_all_source_langs(self, text: str, inline: bool = False) -> None:
-        """Translate the source text from all source languages"""
-        for i, source_lang in enumerate(self.options.source_langs):
-            # Non-interactive verbose mode: separator between sources
-            if not self.options.interactive and self.options.verbose and i > 1:
-                separator = '-' * (self.options.width or 80)
-                self.print_output(prettify('target-separator', separator))
-
-            self.translate(text, source_lang, inline)
-
-    def translate_main(self) -> None:
+    def translate_stdin(self) -> None:
         """Read from input and translate each line"""
-        if self.options.interactive:
-            self._prompt()
 
         input_source = self.options.input or sys.stdin
 
@@ -320,20 +301,16 @@ class TranslationEngine(metaclass=abc.ABCMeta):
                     lines = f.read().splitlines()
 
             for i, line in enumerate(lines):
-                if len(line.strip()) > 0:
-                    # Non-interactive verbose mode: separator between sources
-                    if not self.options.interactive and self.options.verbose and i > 0:
+                if len(line.strip()) == 0:
+                    # Preserve line breaks
+                    self.print_output(line)
+                else:
+                    if self.options.verbose and i > 0:
                         separator = self.options.get('chr-source-separator', '=') * self.options.get('width', 80)
                         self.print_output(prettify('source-separator', separator))
 
-                    if self.options.interactive:
-                        self._repl(line)
-                    else:
-                        self.translate_from_all_source_langs(line)
-                else:
-                    # Non-interactive brief mode: preserve line breaks
-                    if not self.options.interactive and not self.options.verbose:
-                        self.print_output(line)
+                    translations = self.translate(line, self.options.source_lang)
+                    # TODO: do printing and audio here
         else:
             _error(f'[ERROR] File not found: {input_source}')
 

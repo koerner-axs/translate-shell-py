@@ -3,9 +3,9 @@ import json
 from dataclasses import dataclass
 from typing import override, List, Tuple
 
-from src.langdata import get_code, get_endonym, show_definitions_of, show_translations_of
-from src.theme import prettify
-from src.translate import TranslationEngine, _escape_text, format_phonetics, Translation
+from ..langdata import get_code, get_endonym, show_definitions_of, show_translations_of
+from ..theme import prettify
+from ..translate import TranslationEngine, _escape_text, format_phonetics, Translation
 
 
 @dataclass
@@ -267,7 +267,7 @@ class GoogleTranslationEngine(TranslationEngine):
         content = self.http_get(url)
 
         if self.options.dump:
-            return Translation(content, '', [])
+            return Translation(content, '', code_target_lang, [])
 
         content = json.loads(content)
         response = GoogleTranslateResponse(content)
@@ -287,7 +287,7 @@ class GoogleTranslationEngine(TranslationEngine):
         audio_fragments = self.compile_audio_fragments(response, is_verbose, code_host_lang, code_source_lang,
                                                        code_target_lang)
 
-        return Translation(output, code_source_lang, audio_fragments)
+        return Translation(output, code_source_lang, code_target_lang, audio_fragments)
 
     def format_verbose(self, response: GoogleTranslateResponse, code_host_lang, code_source_lang, code_target_lang) -> str:
         """Format engine response verbosely"""

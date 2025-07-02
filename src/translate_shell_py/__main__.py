@@ -5,14 +5,14 @@ import os
 import sys
 from typing import List, Optional, Dict
 
-from config import load_init_script
-from engines.google_translate import GoogleTranslationEngine
-from interactive import run_interactive, run_emacs_mode
-from misc import _yn_to_bool, _get_user_lang, _parse_language_codes, _parse_shortcut_format
-from src.audio import init_audio_player
-from src.engines.bing_translator import BingTranslatorEngine
-from translate import TranslationEngine
-from unimpl import _get_version
+from .config import load_init_script
+from .engines.google_translate import GoogleTranslationEngine
+from .engines.bing_translator import BingTranslatorEngine
+from .interactive import InteractiveShell, run_emacs_mode
+from .misc import _yn_to_bool, _get_user_lang, _parse_language_codes, _parse_shortcut_format
+from .audio import init_audio_player
+from .translate import TranslationEngine
+from .unimpl import _get_version
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -202,9 +202,9 @@ def create_parser() -> argparse.ArgumentParser:
                                     default_user_lang),
                             help='Host language')
     lang_group.add_argument('-s', '--sl', '--source', '-f', '--from',
-                            metavar='CODES', dest='source_langs',
+                            metavar='CODES', dest='source_lang',
                             default=os.environ.get('SOURCE_LANG', 'auto'),
-                            help='Source language(s)')
+                            help='Source language')
     lang_group.add_argument('-t', '--tl', '--target', '--to',
                             metavar='CODES', dest='target_langs',
                             default=os.environ.get('TARGET_LANG') or default_user_lang,
@@ -309,10 +309,7 @@ def _post_process_options(options) -> argparse.Namespace:
         options.browser = None
 
     # Parse language codes
-    if isinstance(options.source_langs, str):
-        options.source_langs = _parse_language_codes(options.source_langs)
-    else:
-        options.source_langs = options.source_langs or ['auto']
+    options.source_lang = options.source_lang or 'auto'
 
     if isinstance(options.target_langs, str):
         options.target_langs = _parse_language_codes(options.target_langs)
@@ -400,7 +397,7 @@ class TranslationCLI:
             self.init_audio_engine()
 
             if self.options.interactive and not self.options.no_rlwrap:
-                return run_interactive(self.options, self.engine)
+                return InteractiveShell(self).run_interactive()
             elif self.options.emacs and not self.options.interactive and not self.options.no_rlwrap:
                 return run_emacs_mode()
             else:
@@ -410,9 +407,7 @@ class TranslationCLI:
             return 130
         except Exception as e:
             print(f"Error: {e}", file=sys.stderr)
-            if self.options.debug:
-                raise
-            return 1
+            raise
 
     def run_single(self) -> int:
         text_args = self.options.text if 'text' in self.options else []
@@ -425,12 +420,12 @@ class TranslationCLI:
                 if self.options.verbose and i > 0:
                     # Print separator between sources
                     print('-' * (self.options.width or 50))
-                self.engine.translate_from_all_source_langs(text, inline=True)
+                self.engine.translate(text, self.options.source_lang, inline=True)
         else:
             # Handle input from file or stdin
             if not self.options.input:
                 self.options.input = sys.stdin
-            self.engine.translate_main()
+            self.engine.translate_stdin()
 
         return self.exit_code
 
