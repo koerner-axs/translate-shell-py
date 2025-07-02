@@ -90,7 +90,7 @@ class InteractiveShell:
                 return
             if self.set_languages(args[0]):
                 command_success(f'{self.cli.options.source_lang} -> {'+'.join(self.cli.options.target_langs)}')
-        elif command == 'swap':
+        elif command in ('s', 'swap'):
             self.swap_languages()
         elif command == 'mute':
             self.set_audio_mode(0)
